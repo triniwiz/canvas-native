@@ -1,0 +1,4 @@
+language = "C++"
+
+[defines]
+"target_os = ios" = "TARGET_OS_IOS"

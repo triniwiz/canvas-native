@@ -1,0 +1,33 @@
+[package]
+name = "canvas-native"
+version = "0.0.1"
+authors = ["Osei Fortune <fortune.osei@yahoo.com>"]
+edition = "2018"
+build="build.rs"
+
+[dependencies]
+skia-bindings = { version = "0.14.1"}
+libc = "0.2.60"
+quick-xml = "0.15.0"
+[dependencies.skia-safe]
+version = "0.14.1"
+features = ["svg"]
+
+[build-dependencies]
+bindgen = "0.51.0"
+cmake = "0.1.40"
+
+[target.'cfg(target_os="android")'.dependencies]
+log = "0.4.7"
+jni = { version = "0.13.0", default-features = false }
+android_logger = "0.8.3"
+jni-sys  = "0.3.0"
+
+[lib]
+name = "canvasnative"
+crate-type = ["staticlib","cdylib"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
