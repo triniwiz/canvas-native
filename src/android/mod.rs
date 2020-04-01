@@ -1,2 +1,2 @@
-pub mod core;
 mod bitmap;
+pub mod core;

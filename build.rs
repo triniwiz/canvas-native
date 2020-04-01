@@ -1,9 +1,8 @@
 use bindgen;
-use std::{env, fmt};
-use std::path::PathBuf;
-use std::fmt::{Display, Formatter};
 use std::borrow::Borrow;
-
+use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
+use std::{env, fmt};
 
 #[derive(Clone, Debug)]
 pub struct Target {
@@ -40,10 +39,9 @@ impl Display for Target {
     }
 }
 
-
-
 fn main() {
     let target_str = env::var("TARGET").unwrap();
+    dbg!("target os {:?}",&target_str);
     let arm_64_ndk = "/tmp/ndk_arm64";
     let x86_64_ndk = "/tmp/ndk_x86_64";
     let mut include_dir = String::from("-I");
@@ -66,19 +64,18 @@ fn main() {
     };
 
     match target.system.borrow() {
-        "android" =>{
-            println!("cargo:rustc-link-lib=c++_shared");
+        "android" => {
+            //println!("cargo:rustc-link-lib=c++_shared");
             println!("cargo:rustc-link-lib=jnigraphics"); // the "-l" flag
             if target.architecture.eq("arm64") {
                 include_dir.push_str(arm_64_ndk);
-            }else if target.architecture.eq("x86_64"){
+            } else if target.architecture.eq("x86_64") {
                 include_dir.push_str(x86_64_ndk);
-            }else {
+            } else {
                 return;
             }
 
             include_dir.push_str("/sysroot/usr/include");
-
 
             // The bindgen::Builder is the main entry point
             // to bindgen, and lets you build up options for

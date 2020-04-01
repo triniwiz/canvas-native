@@ -1,27 +1,30 @@
 [package]
 name = "canvas-native"
-version = "0.0.1"
+version = "0.2.0"
 authors = ["Osei Fortune <fortune.osei@yahoo.com>"]
 edition = "2018"
 build="build.rs"
 
-[dependencies]
-skia-bindings = { version = "0.14.1"}
-libc = "0.2.60"
-quick-xml = "0.15.0"
-[dependencies.skia-safe]
-version = "0.14.1"
-features = ["svg"]
-
 [build-dependencies]
-bindgen = "0.51.0"
-cmake = "0.1.40"
+bindgen = "0.53.2"
+cmake = "0.1.42"
+
+[dependencies]
+libc = "0.2.67"
+quick-xml = "0.15.0"
+base64 = "0.12.0"
 
 [target.'cfg(target_os="android")'.dependencies]
-log = "0.4.7"
-jni = { version = "0.13.0", default-features = false }
-android_logger = "0.8.3"
+log = "0.4.8"
+jni = { version = "0.15.0", default-features = false }
+android_logger = "0.8.6"
 jni-sys  = "0.3.0"
+skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "405bf3c" , features = ["gl"]}
+skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "405bf3c",  features = ["gl"]}
+
+[target.'cfg(target_os="ios")'.dependencies]
+skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "405bf3c" , features = ["metal","gl"]}
+skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "405bf3c", features = ["metal","gl"]}
 
 [lib]
 name = "canvasnative"
@@ -30,4 +33,5 @@ crate-type = ["staticlib","cdylib"]
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "z"
+opt-level = 3
+debug = false

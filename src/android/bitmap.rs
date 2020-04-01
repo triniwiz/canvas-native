@@ -4,12 +4,23 @@
 extern crate libc;
 
 use jni_sys::jobject;
-use libc::c_void;
+use std::os::raw::c_void;
 
 #[doc = " Bitmap info, see AndroidBitmap_getInfo()."]
 #[repr(C)]
 #[derive(Debug, Clone)]
-pub struct AndroidBitmapInfo { #[doc = " The bitmap width in pixels."] pub width: u32, #[doc = " The bitmap height in pixels."] pub height: u32, #[doc = " The number of byte per row."] pub stride: u32, #[doc = " The bitmap pixel format. See {@link AndroidBitmapFormat}"] pub format: i32, #[doc = " Unused."] pub flags: u32 }
+pub struct AndroidBitmapInfo {
+    #[doc = " The bitmap width in pixels."]
+    pub width: u32,
+    #[doc = " The bitmap height in pixels."]
+    pub height: u32,
+    #[doc = " The number of byte per row."]
+    pub stride: u32,
+    #[doc = " The bitmap pixel format. See {@link AndroidBitmapFormat}"]
+    pub format: i32,
+    #[doc = " Unused."]
+    pub flags: u32,
+}
 
 impl Default for AndroidBitmapInfo {
     fn default() -> Self {
@@ -23,14 +34,17 @@ impl Default for AndroidBitmapInfo {
     }
 }
 
-
-extern "C" {
+extern "system" {
     #[doc = " Given a java bitmap object, fill out the AndroidBitmapInfo struct for it."]
     #[doc = " If the call fails, the info parameter will be ignored."]
-    pub fn AndroidBitmap_getInfo(env: *mut jni_sys::JNIEnv, jbitmap: jobject, info: *mut AndroidBitmapInfo) -> ::std::os::raw::c_int;
+    pub fn AndroidBitmap_getInfo(
+        env: *mut jni_sys::JNIEnv,
+        jbitmap: jobject,
+        info: *mut AndroidBitmapInfo,
+    ) -> ::std::os::raw::c_int;
 }
 
-extern "C" {
+extern "system" {
     #[doc = " Given a java bitmap object, attempt to lock the pixel address."]
     #[doc = " Locking will ensure that the memory for the pixels will not move"]
     #[doc = " until the unlockPixels call, and ensure that, if the pixels had been"]
@@ -42,14 +56,20 @@ extern "C" {
     #[doc = ""]
     #[doc = " If this succeeds, *addrPtr will be set to the pixel address. If the call"]
     #[doc = " fails, addrPtr will be ignored."]
-    pub fn AndroidBitmap_lockPixels(env: *mut jni_sys::JNIEnv, jbitmap: jobject, addrPtr: *mut *mut c_void) -> ::std::os::raw::c_int;
+    pub fn AndroidBitmap_lockPixels(
+        env: *mut jni_sys::JNIEnv,
+        jbitmap: jobject,
+        addrPtr: *mut *mut c_void,
+    ) -> ::std::os::raw::c_int;
 }
 
-extern "C" {
+extern "system" {
     #[doc = " Call this to balance a successful call to AndroidBitmap_lockPixels."]
-    pub fn AndroidBitmap_unlockPixels(env: *mut jni_sys::JNIEnv, jbitmap: jobject) -> ::std::os::raw::c_int;
+    pub fn AndroidBitmap_unlockPixels(
+        env: *mut jni_sys::JNIEnv,
+        jbitmap: jobject,
+    ) -> ::std::os::raw::c_int;
 }
-
 
 #[doc = " Operation was successful."]
 pub const ANDROID_BITMAP_RESULT_SUCCESS: _bindgen_ty_1 = 0;
