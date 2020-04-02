@@ -354,7 +354,10 @@ pub extern "C" fn native_surface_resized_legacy(
     canvas_native_ptr: c_longlong,
 ) -> c_longlong {
     let mut canvas_native: CanvasNative = unsafe { *Box::from_raw(canvas_native_ptr as *mut _) };
+    let mut kGrCacheMaxCount = 8192;
+    let mut kGrCacheMaxByteSize = 24 * (1 << 20);
     let mut context = canvas_native.context.unwrap();
+   // context.set_resource_cache_limit(kGrCacheMaxByteSize);
     let mut frame_buffer = gpu::gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
     let target = BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);

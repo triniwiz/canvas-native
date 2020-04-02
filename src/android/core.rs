@@ -7,7 +7,7 @@ use crate::android::bitmap::{
     AndroidBitmapInfo, AndroidBitmap_getInfo, AndroidBitmap_lockPixels, AndroidBitmap_unlockPixels,
     ANDROID_BITMAP_RESULT_SUCCESS,
 };
-use crate::common::{add_path_to_path, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_sw, draw_rect, draw_svg_image, draw_text, ellipse, ellipse_no_rotation, fill, get_image_data, get_measure_text, is_font_size, is_font_style, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_width, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasNative, CanvasState, CanvasStateItem, SVGCanvasNative, create_path_from_path, create_matrix, set_matrix, get_matrix, clip_path_rule, clip, stroke_path, add_path_to_path_with_matrix, create_path_2d_from_path_data, fill_path_rule, fill_rule, to_data_url, to_data, flush, free_matrix, free_path_2d};
+use crate::common::{add_path_to_path, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_sw, draw_rect, draw_svg_image, draw_text, ellipse, ellipse_no_rotation, fill, get_image_data, get_measure_text, is_font_size, is_font_style, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_width, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasNative, CanvasState, CanvasStateItem, SVGCanvasNative, create_path_from_path, create_matrix, set_matrix, get_matrix, clip_path_rule, clip, stroke_path, add_path_to_path_with_matrix, create_path_2d_from_path_data, fill_path_rule, fill_rule, to_data_url, to_data, flush, free_matrix, free_path_2d, set_global_alpha, set_line_join, set_miter_limit};
 use android_logger::Config;
 use jni::objects::{JClass, JObject, JString, JValue};
 use jni::strings::JavaStr;
@@ -17,7 +17,7 @@ use jni_sys::{jbyte, jbyteArray, jfloat, jfloatArray, JNI_TRUE};
 use libc::{c_int, size_t};
 use log::Level;
 use log::{debug, info};
-use skia_safe::gpu::{gl, BackendRenderTarget, Context, SurfaceOrigin};
+use skia_safe::gpu::{gl, BackendRenderTarget, Context, SurfaceOrigin, ResourceCacheLimits};
 use skia_safe::paint::{Cap, Join, Style};
 use skia_safe::path::Direction;
 use skia_safe::{AlphaType, Bitmap, BlendMode, Canvas, Color, ColorSpace, ColorType, Data, Font, FontMetrics, FontStyle, FontStyleWeight, FontStyleWidth, ISize, Image, ImageInfo, MaskFilter, Paint, Path, PixelGeometry, Pixmap, Point, Rect, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, Typeface, Size, IPoint, FilterQuality};
@@ -103,6 +103,11 @@ fn init(buffer_id: jint,
     let interface = gl::Interface::new_native();
     let context = Context::new_gl(interface.unwrap());
     let mut ctx = context.unwrap();
+   // let mut kGrCacheMaxCount = 8192;
+   // let mut kGrCacheMaxByteSize = 24 * (1 << 20);
+    //let limits = ctx.resource_cache_limits();
+    //ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: limits.max_resources, max_resource_bytes: max_bytes as usize });
+   // ctx.set_resource_cache_limit(kGrCacheMaxByteSize as usize);
     let mut frame_buffer = gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
     let target =
@@ -264,6 +269,17 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToData
     let mut data = to_data(canvas_native_ptr);
     env.byte_array_from_slice(data.as_mut_slice())
         .unwrap()
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeSetMiterLimit(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    limit: f32,
+) -> jlong {
+    set_miter_limit(canvas_native_ptr, limit)
 }
 
 #[no_mangle]
@@ -1071,6 +1087,17 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetGlobalAlpha(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    alpha: u8,
+) -> jlong {
+    set_global_alpha(canvas_native_ptr, alpha)
+}
+
+
+#[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineCap(
     env: JNIEnv,
     _: JClass,
@@ -1078,6 +1105,20 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     line_cap: JString,
 ) -> jlong {
     set_line_cap(
+        canvas_native_ptr,
+        env.get_string(line_cap).unwrap().as_ptr() as _,
+    )
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineJoin(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    line_cap: JString,
+) -> jlong {
+    set_line_join(
         canvas_native_ptr,
         env.get_string(line_cap).unwrap().as_ptr() as _,
     )
