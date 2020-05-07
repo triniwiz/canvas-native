@@ -6,3 +6,7 @@ pub mod android;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
+
+#[cfg(target_os = "ios")]
+#[macro_use]
+extern crate objc;
