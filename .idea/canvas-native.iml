@@ -201,6 +201,8 @@
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/crossbeam-epoch-fa1c45f6ea624189/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/memoffset-27ab9f4aff99c9e0/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/rayon-core-b0c10444151a5345/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/encoding_rs-78d905c89789bf0b/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-df23c32fc3915d2a/out" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

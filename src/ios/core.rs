@@ -1,6 +1,6 @@
 extern crate libc;
 
-use crate::common::{adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, get_image_data, get_measure_text, is_font_size, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, COLOR_BLACK, create_path_2d, create_path_from_path, create_path_2d_from_path_data, add_path_to_path, add_path_to_path_with_matrix, create_matrix, set_matrix, get_matrix, CanvasArray, fill_path_rule, fill_rule, stroke_path, clip, clip_path_rule, to_data_url, flush, free_path_2d, set_fill_color, set_stroke_color, NativeImageAsset, image_asset_load_from_path, image_asset_load_from_raw, image_asset_get_bytes, image_asset_free_bytes, image_asset_width, image_asset_scale, image_asset_flip_x, image_asset_flip_y, image_asset_save_path, image_asset_height, image_asset_get_error, image_asset_release, image_asset_flip_y_in_place_owned, image_asset_flip_x_in_place_owned, NativeByteArray};
+use crate::common::{adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, get_image_data, get_measure_text, is_font_size, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, COLOR_BLACK, create_path_2d, create_path_from_path, create_path_2d_from_path_data, add_path_to_path, add_path_to_path_with_matrix, create_matrix, set_matrix, get_matrix, CanvasArray, fill_path_rule, fill_rule, stroke_path, clip, clip_path_rule, to_data_url, flush, free_path_2d, set_fill_color, set_stroke_color, NativeImageAsset, image_asset_load_from_path, image_asset_load_from_raw, image_asset_get_bytes, image_asset_free_bytes, image_asset_width, image_asset_scale, image_asset_flip_x, image_asset_flip_y, image_asset_save_path, image_asset_height, image_asset_get_error, image_asset_release, image_asset_flip_y_in_place_owned, image_asset_flip_x_in_place_owned, NativeByteArray, TextEncoder, TextDecoder, text_encoder_get_encoding, text_encoder_encode, text_decoder_get_encoding, text_decoder_decode, free_text_decoder, free_text_encoder, get_current_transform, set_current_transform};
 use libc::{c_float, c_int, c_longlong, size_t};
 use skia_safe::{gpu, IPoint};
 use skia_safe::gradient_shader::GradientShaderColors;
@@ -21,6 +21,7 @@ use skia_safe::gpu::{BackendRenderTarget, Context, ResourceCacheLimits};
 use std::ptr::{null, null_mut};
 
 use cocoa::foundation::NSAutoreleasePool;
+use skia_safe::gpu::gl::Interface;
 
 struct AutoreleasePool(*mut objc::runtime::Object);
 
@@ -39,6 +40,54 @@ impl Drop for AutoreleasePool {
         }
     }
 }
+
+#[no_mangle]
+pub extern "C" fn native_free_byte_array(array: NativeByteArray) {
+    native_free_byte_array(array)
+}
+
+#[no_mangle]
+pub extern "C" fn native_create_text_encoder(encoding: *const c_char) -> c_longlong {
+    Box::into_raw(Box::new(TextEncoder::new(encoding))) as i64
+}
+
+#[no_mangle]
+pub extern "C" fn native_text_encoder_get_encoding(encoder: i64) -> *const c_char {
+    text_encoder_get_encoding(encoder)
+}
+
+#[no_mangle]
+pub extern "C" fn native_text_encoder_encode(encoder: i64, text: *const c_char) -> NativeByteArray {
+    text_encoder_encode(encoder, text)
+}
+
+#[no_mangle]
+pub extern "C" fn native_text_encoder_free(encoder: i64) {
+    free_text_encoder(encoder);
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_create_text_decoder(decoding: *const c_char) -> c_longlong {
+    Box::into_raw(Box::new(TextDecoder::new(decoding))) as i64
+}
+
+#[no_mangle]
+pub extern "C" fn native_text_decoder_get_encoding(decoder: i64) -> *const c_char {
+    text_decoder_get_encoding(decoder)
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_text_decoder_decode(decoder: i64, data: *const u8, len: size_t) -> *const c_char {
+    text_decoder_decode(decoder, data, len)
+}
+
+#[no_mangle]
+pub extern "C" fn native_text_decoder_free(decoder: i64) {
+    free_text_decoder(decoder);
+}
+
 
 #[no_mangle]
 pub extern "C" fn native_image_asset_flip_y_in_place_owned(width: u32, height: u32, buf: *mut u8, length: usize) {
@@ -481,10 +530,13 @@ pub extern "C" fn native_surface_resized_legacy(
     canvas_native_ptr: c_longlong,
 ) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
-    let mut canvas_native: CanvasNative = unsafe { *Box::from_raw(canvas_native_ptr as *mut _) };
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
     let mut kGrCacheMaxCount = 8192;
     let mut kGrCacheMaxByteSize = 24 * (1 << 20);
     let mut context = canvas_native.context.unwrap();
+    let mut surface = &mut canvas_native.surface;
+    context.flush();
+    let snapshot = surface.image_snapshot();
     // context.set_resource_cache_limit(kGrCacheMaxByteSize);
     let mut frame_buffer = gpu::gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
@@ -492,9 +544,12 @@ pub extern "C" fn native_surface_resized_legacy(
     let surface_props = SurfaceProps::new(SurfacePropsFlags::default(), PixelGeometry::Unknown);
     let surface_holder = Surface::from_backend_render_target(&mut context, &target, gpu::SurfaceOrigin::BottomLeft, ColorType::RGBA8888, None, Some(&surface_props));
     let mut surface = surface_holder.unwrap();
+    let mut canvas = surface.canvas();
+    canvas.draw_image(snapshot, Point::new(0f32, 0f32), None);
+    //canvas.flush();
     canvas_native.context = Some(context);
     canvas_native.surface = surface;
-    Box::into_raw(Box::new(canvas_native)) as *mut _ as i64
+    Box::into_raw(canvas_native) as *mut _ as i64
 }
 
 
@@ -1423,4 +1478,16 @@ pub extern "C" fn native_drop_image_data(data: CanvasArray) {
 pub extern "C" fn native_drop_text_metrics(data: CanvasTextMetrics) {
     let _auto_release_pool = AutoreleasePool::new();
     Box::new(data);
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_get_current_transform(canvas_native_ptr: c_longlong) -> c_longlong {
+    get_current_transform(canvas_native_ptr)
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_set_current_transform(canvas_native_ptr: c_longlong, matrix: c_longlong) -> c_longlong {
+    set_current_transform(canvas_native_ptr, matrix)
 }
