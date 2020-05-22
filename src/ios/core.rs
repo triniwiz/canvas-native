@@ -354,10 +354,10 @@ pub extern "C" fn native_init_legacy(
     let interface = gpu::gl::Interface::new_native();
     let context = Context::new_gl(interface);
     let mut ctx = context.unwrap();
-    let mut kGrCacheMaxCount = 8192;
-    let mut kGrCacheMaxByteSize = 24 * (1 << 20);
+    let mut k_gr_cache_max_count = 8192;
+    let mut _k_gr_cache_max_byte_size = 24 * (1 << 20);
     let max_bytes = width * height * 12 * 4;
-    ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: kGrCacheMaxCount, max_resource_bytes: max_bytes as usize });
+    ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: k_gr_cache_max_count, max_resource_bytes: max_bytes as usize });
     let mut frame_buffer = gpu::gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
     let target = BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);

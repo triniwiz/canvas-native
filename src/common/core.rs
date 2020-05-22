@@ -1,19 +1,31 @@
 extern crate libc;
 
-use skia_safe::paint::{Cap, Join, Style};
-use skia_safe::{AddPathMode, AlphaType, Bitmap, BlendMode, BlurStyle, ClipOp, Color, ColorType, Data, FilterQuality, Font, FontHinting, FontStyle, FontStyleWeight, IPoint, IRect, ISize, Image, ImageFilter, ImageInfo, MaskFilter, Matrix, Paint, Path, PathEffect, Point, Rect, Shader, SrcRectConstraint, Surface, TextBlob, TileMode, Typeface, Vector, EncodedImageFormat, Budgeted, Size};
-
-use libc::{c_float, c_int, c_longlong, size_t};
-use skia_safe::gpu::{Context, SurfaceOrigin};
-use skia_safe::gradient_shader::GradientShaderColors;
-use skia_safe::path::FillType;
-use skia_safe::svg::Canvas;
-use skia_safe::utils::parse_path::from_svg;
+use std::borrow::{Borrow, BorrowMut, Cow};
 use std::ffi::{CStr, CString};
 use std::mem;
-use std::os::raw::{c_char, c_void, c_uint};
-use std::ptr::{null_mut, slice_from_raw_parts, slice_from_raw_parts_mut, null};
+use std::ops::Deref;
+use std::os::raw::{c_char, c_uint, c_void};
+use std::ptr::{null, null_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
+
+use encoding_rs::{CoderResult, UTF_8};
 use image::*;
+use image::{GenericImageView, ImageFormat};
+use image::imageops::FilterType;
+use libc::{c_float, c_int, c_longlong, size_t};
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use skia_safe::{AddPathMode, AlphaType, Bitmap, BlendMode, BlurStyle, Budgeted, ClipOp, Color, ColorType, Data, EncodedImageFormat, FilterQuality, Font, FontHinting, FontStyle, FontStyleWeight, Image, ImageFilter, ImageInfo, IPoint, IRect, ISize, MaskFilter, Matrix, Paint, Path, PathEffect, Point, Rect, Shader, Size, SrcRectConstraint, Surface, TextBlob, TileMode, Typeface, Vector};
+use skia_safe::font::Edging;
+use skia_safe::gpu::{Context, SurfaceOrigin};
+use skia_safe::gradient_shader::GradientShaderColors;
+use skia_safe::image::CachingHint;
+use skia_safe::image_filters::drop_shadow;
+use skia_safe::paint::{Cap, Join, Style};
+use skia_safe::path::FillType;
+use skia_safe::svg::Canvas;
+use skia_safe::TextEncoding::UTF8;
+use skia_safe::utils::parse_path::from_svg;
+use skia_safe::utils::text_utils::Align;
 
 pub const COLOR_BLACK: u32 = 0xff000000 as usize as u32;
 
@@ -2945,7 +2957,7 @@ pub(crate) fn get_image_data(
     let mut info = ImageInfo::new_n32_premul(ISize::new(sw as i32, sh as i32), None);
     let row_bytes = info.width() * 4;
     let mut slice = vec![255u8; (row_bytes * info.height()) as usize];
-    let read = canvas.read_pixels(
+    let _read = canvas.read_pixels(
         &mut info,
         slice.as_mut_slice(),
         row_bytes as usize,
@@ -3087,19 +3099,6 @@ pub(crate) fn add_path_to_path_with_matrix(
     }
     path_native_ptr
 }
-
-use quick_xml::events::Event;
-use quick_xml::Reader;
-use skia_safe::font::Edging;
-use skia_safe::image::CachingHint;
-use skia_safe::image_filters::drop_shadow;
-use skia_safe::utils::text_utils::Align;
-use std::borrow::{Borrow, BorrowMut, Cow};
-use std::ops::Deref;
-use image::imageops::FilterType;
-use image::{ImageFormat, GenericImageView};
-use encoding_rs::{UTF_8, CoderResult};
-use skia_safe::TextEncoding::UTF8;
 
 pub(crate) fn draw_svg_image(svg_canvas_native_ptr: c_longlong, svg: *const c_char) -> c_longlong {
     if svg_canvas_native_ptr == 0 {
