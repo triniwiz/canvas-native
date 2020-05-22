@@ -66,7 +66,7 @@ unsafe fn drawText(
 }
 
 unsafe fn drawRect(
-    env: JNIEnv,
+    _env: JNIEnv,
     canvas_native_ptr: jlong,
     x: jfloat,
     y: jfloat,
@@ -228,7 +228,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextDecoder_nativeDecod
 
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeInit(env: JNIEnv, _: JClass) -> jlong {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeInit(_env: JNIEnv, _: JClass) -> jlong {
     create_image_asset()
 }
 
@@ -242,22 +242,22 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetByt
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetWidth(env: JNIEnv, _: JClass, asset: jlong) -> jint {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetWidth(_env: JNIEnv, _: JClass, asset: jlong) -> jint {
     image_asset_width(asset) as i32
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetHeight(env: JNIEnv, _: JClass, asset: jlong) -> jint {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetHeight(_env: JNIEnv, _: JClass, asset: jlong) -> jint {
     image_asset_height(asset) as i32
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeScale(env: JNIEnv, _: JClass, asset: jlong, x: jint, y: jint) -> jlong {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeScale(_env: JNIEnv, _: JClass, asset: jlong, x: jint, y: jint) -> jlong {
     image_asset_scale(asset, x as u32, y as u32)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipX(env: JNIEnv, _: JClass, asset: jlong) -> jlong {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipX(_env: JNIEnv, _: JClass, asset: jlong) -> jlong {
     image_asset_flip_x(asset)
 }
 
@@ -268,7 +268,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeSave(e
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipY(env: JNIEnv, _: JClass, asset: jlong) -> jlong {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipY(_env: JNIEnv, _: JClass, asset: jlong) -> jlong {
     image_asset_flip_y(asset)
 }
 
@@ -280,7 +280,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetErr
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeRelease(env: JNIEnv, _: JClass, asset: jlong) {
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeRelease(_env: JNIEnv, _: JClass, asset: jlong) {
     image_asset_release(asset)
 }
 
@@ -304,7 +304,6 @@ unsafe fn flip_in_place_3d(env: JNIEnv, pixels: jbyteArray, width: jint, height:
     let size = env.get_array_length(pixels).unwrap_or(0);
     let mut array = vec![0i8; size as usize];
     env.get_byte_array_region(pixels, 0, array.as_mut_slice());
-    let length = width * 4;
     let mut data = array.as_mut_ptr();
     for z in 0..depth {
         flip_in_place_native(data, width, height);
@@ -411,7 +410,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_WebGLRenderingContext_n
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeDestroy(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) {
@@ -422,7 +421,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeDestro
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeInit(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     buffer_id: jint,
@@ -436,7 +435,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeInit(
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeResize(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     buffer_id: jint,
@@ -543,16 +542,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToData
 
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeSetMiterLimit(
-    env: JNIEnv,
-    _: JClass,
-    canvas_native_ptr: jlong,
-    limit: f32,
-) -> jlong {
-    set_miter_limit(canvas_native_ptr, limit)
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToDataUrl(
     env: JNIEnv,
     _: JClass,
@@ -566,6 +555,17 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToData
     let result = to_data_url(canvas_native_ptr, format.as_ptr(), ((quality * 100f32) as i32));
     let string = CStr::from_ptr(result).to_str();
     env.new_string(string.unwrap()).unwrap().into_inner()
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetMiterLimit(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    limit: f32,
+) -> jlong {
+    set_miter_limit(canvas_native_ptr, limit)
 }
 
 #[no_mangle]
