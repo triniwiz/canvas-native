@@ -3,35 +3,37 @@
 #![allow(non_snake_case)]
 extern crate libc;
 
-use crate::android::bitmap::{
-    AndroidBitmapInfo, AndroidBitmap_getInfo, AndroidBitmap_lockPixels, AndroidBitmap_unlockPixels,
-    ANDROID_BITMAP_RESULT_SUCCESS,
-};
-use crate::common::{add_path_to_path, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_sw, draw_rect, draw_svg_image, draw_text, ellipse, ellipse_no_rotation, fill, get_image_data, get_measure_text, is_font_size, is_font_style, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_width, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasNative, CanvasState, CanvasStateItem, SVGCanvasNative, create_path_from_path, create_matrix, set_matrix, get_matrix, clip_path_rule, clip, stroke_path, add_path_to_path_with_matrix, create_path_2d_from_path_data, fill_path_rule, fill_rule, to_data_url, to_data, flush, free_matrix, free_path_2d, set_global_alpha, set_line_join, set_miter_limit, set_fill_color, set_stroke_color, NativeImageAsset, image_asset_load_from_path, image_asset_load_from_raw, create_image_asset, image_asset_get_bytes, image_asset_release, image_asset_free_bytes, image_asset_width, image_asset_height, image_asset_scale, image_asset_flip_y, image_asset_flip_x, image_asset_save_path, image_asset_get_error, image_asset_load_from_slice_i8, to_byte_slice, image_asset_flip_y_in_place_owned, TextEncoder, text_encoder_get_encoding, TextDecoder, text_encoder_encode, text_decoder_decode, text_decoder_get_encoding, set_current_transform, get_current_transform};
+use std::borrow::{Borrow, BorrowMut};
+use std::ffi::{CStr, CString};
+use std::fs::Metadata;
+use std::io::{Error, Read};
+use std::mem;
+use std::ops::Deref;
+use std::os::raw::{c_char, c_float, c_longlong, c_void};
+use std::ptr::null_mut;
+use std::string::String;
+
 use android_logger::Config;
+use jni::{JNIEnv, sys};
 use jni::objects::{JClass, JObject, JString, JValue};
 use jni::strings::JavaStr;
 use jni::sys::{jboolean, jint, jintArray, jlong, jobject, jstring};
-use jni::{sys, JNIEnv};
-use jni_sys::{jbyte, jbyteArray, jfloat, jfloatArray, JNI_TRUE};
+use jni_sys::{jbyte, jbyteArray, jfloat, jfloatArray, JNI_FALSE, JNI_TRUE};
 use libc::{c_int, size_t};
-use log::Level;
 use log::{debug, info};
-use skia_safe::gpu::{gl, BackendRenderTarget, Context, SurfaceOrigin, ResourceCacheLimits};
+use log::Level;
+use skia_safe::{AlphaType, Bitmap, BlendMode, Canvas, Color, ColorSpace, ColorType, Data, FilterQuality, Font, FontMetrics, FontStyle, FontStyleWeight, FontStyleWidth, Image, ImageInfo, IPoint, ISize, MaskFilter, Paint, Path, PixelGeometry, Pixmap, Point, Rect, Size, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, Typeface};
+use skia_safe::gpu::{BackendRenderTarget, Context, gl, ResourceCacheLimits, SurfaceOrigin};
+use skia_safe::gpu::gl::Interface;
+use skia_safe::image_filters::image;
 use skia_safe::paint::{Cap, Join, Style};
 use skia_safe::path::Direction;
-use skia_safe::{AlphaType, Bitmap, BlendMode, Canvas, Color, ColorSpace, ColorType, Data, Font, FontMetrics, FontStyle, FontStyleWeight, FontStyleWidth, ISize, Image, ImageInfo, MaskFilter, Paint, Path, PixelGeometry, Pixmap, Point, Rect, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, Typeface, Size, IPoint, FilterQuality};
-use std::borrow::{Borrow, BorrowMut};
-use std::ffi::{CStr, CString};
-use std::mem;
-use std::ops::Deref;
-use std::os::raw::{c_char, c_void, c_longlong, c_float};
-use std::ptr::null_mut;
-use std::string::String;
-use skia_safe::image_filters::image;
-use skia_safe::gpu::gl::Interface;
-use std::io::{Read, Error};
-use std::fs::Metadata;
+
+use crate::android::bitmap::{
+    ANDROID_BITMAP_RESULT_SUCCESS, AndroidBitmap_getInfo, AndroidBitmap_lockPixels, AndroidBitmap_unlockPixels,
+    AndroidBitmapInfo,
+};
+use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasNative, CanvasState, CanvasStateItem, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, create_image_asset, create_image_data, create_matrix, create_path_2d_from_path_data, create_path_from_path, draw_image, draw_image_dw, draw_image_sw, draw_rect, draw_svg_image, draw_text, ellipse, ellipse_no_rotation, fill, fill_path_rule, fill_rule, flush, free_matrix, free_path_2d, get_current_transform, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_load_from_slice_i8, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_style, is_font_weight, is_point_in_path, is_point_in_stroke, line_to, move_to, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_fill_color, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_text_align, set_transform, stroke, stroke_path, SVGCanvasNative, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_byte_slice, to_data, to_data_url, transform, translate};
 
 pub const COLOR_BLACK: usize = 0xff000000 as usize;
 
@@ -105,11 +107,10 @@ fn init(buffer_id: jint,
     let interface = gl::Interface::new_native();
     let context = Context::new_gl(interface.unwrap());
     let mut ctx = context.unwrap();
-    // let mut kGrCacheMaxCount = 8192;
-    // let mut kGrCacheMaxByteSize = 24 * (1 << 20);
-    //let limits = ctx.resource_cache_limits();
-    //ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: limits.max_resources, max_resource_bytes: max_bytes as usize });
-    // ctx.set_resource_cache_limit(kGrCacheMaxByteSize as usize);
+    let mut k_gr_cache_max_count = 8192;
+    let mut _k_gr_cache_max_byte_size = 24 * (1 << 20);
+    let max_bytes = width * height * 12 * 5;
+    //ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: k_gr_cache_max_count, max_resource_bytes: max_bytes as usize });
     let mut frame_buffer = gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
     let target =
@@ -305,7 +306,7 @@ unsafe fn flip_in_place_3d(env: JNIEnv, pixels: jbyteArray, width: jint, height:
     let mut array = vec![0i8; size as usize];
     env.get_byte_array_region(pixels, 0, array.as_mut_slice());
     let mut data = array.as_mut_ptr();
-    for z in 0..depth {
+    for _z in 0..depth {
         flip_in_place_native(data, width, height);
         data.offset((4 * width * height) as isize);
     }
@@ -320,7 +321,7 @@ unsafe fn flip_in_place_native(pixels: *mut i8, width: i32, height: i32) {
 unsafe fn flip_in_place(env: JNIEnv, pixels: jbyteArray, width: jint, height: jint) {
     let line_size = width * 4;
     let mut line_buffer_storage = vec![0i8; line_size as usize];
-    let mut line_buffer = line_buffer_storage.as_mut_ptr();
+    let mut _line_buffer = line_buffer_storage.as_mut_ptr();
     let storage_size = env.get_array_length(pixels).unwrap_or(0);
     let mut data_storage = vec![0i8; storage_size as usize];
     env.get_byte_array_region(pixels, 0, data_storage.as_mut_slice());
@@ -1371,6 +1372,14 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineDashOffset(env: JNIEnv,
+                                                                                                          _: JClass,
+                                                                                                          canvas_native_ptr: jlong,
+                                                                                                          offset: jfloat, ) -> jlong {
+    set_line_dash_offset(canvas_native_ptr, offset)
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetTransform(
     env: JNIEnv,
     _: JClass,
@@ -1678,9 +1687,75 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     reset_transform(canvas_native_ptr)
 }
 
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInPath(_env: JNIEnv,
+                                                                                                      _: JClass, canvas_ptr: i64, x: f32, y: f32) -> jboolean {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let _ = Box::into_raw(canvas_native);
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let rule = CString::new("nonzero").unwrap().into_raw();
+    let result = is_point_in_path(canvas_ptr, path, x, y, rule);
+    let _ = unsafe { CString::from_raw(rule) };
+    let _ = Box::from_raw(path as *mut c_void);
+    if result { return JNI_TRUE; }
+    return JNI_FALSE;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInPathWithRule(env: JNIEnv,
+                                                                                                              _: JClass, canvas_ptr: i64, x: f32, y: f32, fill_rule: JString) -> jboolean {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let _ = Box::into_raw(canvas_native);
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let default = env.new_string("nonzero").unwrap();
+    let rule = env.get_string(fill_rule).unwrap_or(JavaStr::from_env(&env, default).unwrap());
+    let result = is_point_in_path(canvas_ptr, path, x, y, rule.get_raw());
+    let _ = Box::from_raw(path as *mut c_void);
+    if result { return JNI_TRUE; }
+    return JNI_FALSE;
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInPathWithPathRule(env: JNIEnv,
+                                                                                                                  _: JClass, canvas_ptr: i64, path: jlong, x: f32, y: f32, fill_rule: JString) -> jboolean {
+    let default = env.new_string("nonzero").unwrap();
+    let rule = env.get_string(fill_rule).unwrap_or(JavaStr::from_env(&env, default).unwrap());
+    let result = is_point_in_path(canvas_ptr, path, x, y, rule.get_raw());
+    if result { return JNI_TRUE; }
+    return JNI_FALSE;
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInStroke(_env: JNIEnv,
+                                                                                                        _: JClass, canvas_ptr: i64, x: f32, y: f32) -> jboolean {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let _ = Box::into_raw(canvas_native);
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let result = is_point_in_stroke(canvas_ptr, path, x, y);
+    let _ = Box::from_raw(path as *mut c_void);
+    if result { return JNI_TRUE; }
+    return JNI_FALSE;
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInStrokeWithPath(_env: JNIEnv,
+                                                                                                                _: JClass, canvas_ptr: i64, path: jlong, x: f32, y: f32) -> jboolean {
+    let result = is_point_in_stroke(canvas_ptr, path, x, y);
+    if result { return JNI_TRUE; }
+    return JNI_FALSE;
+}
+
+
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeFreePath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path: jlong,
 ) {

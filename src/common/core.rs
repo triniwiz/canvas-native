@@ -133,6 +133,64 @@ pub(crate) fn adjust_end_angle(
     return round_32(new_end_angle as f64, 3);
 }
 
+fn det(matrix: &Matrix) -> f32 {
+    let transform = matrix.to_affine().unwrap();
+    return transform[0] * transform[3] - transform[1] * transform[2];
+}
+
+fn is_invertible(matrix: &Matrix) -> bool {
+    return det(matrix) != 0.0;
+}
+
+
+pub(crate) fn is_point_in_path(canvas_ptr: i64, path: i64, x: f32, y: f32, fill_rule: *const c_char) -> bool {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let mut surface = &mut canvas_native.surface;
+    let mut canvas = surface.canvas();
+    let invertible = is_invertible(&canvas.total_matrix());
+    if !invertible { return false; }
+    if !x.is_finite() || !y.is_finite() { return false; }
+    let mut matrix = canvas.total_matrix().clone();
+    let mut inverse = matrix.invert().unwrap();
+    let point = Point::new(x, y);
+    let transformed_point = inverse.map_point(point);
+    let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
+    let mut path_to_compare =path.clone();
+    let fill = match unsafe { CStr::from_ptr(fill_rule) }.to_str().unwrap_or("nonzero") {
+        "evenodd" => FillType::EvenOdd,
+        _ => FillType::Winding
+    };
+    path_to_compare.set_fill_type(fill);
+    let result = path_to_compare.contains(transformed_point);
+    let _ = Box::into_raw(canvas_native);
+    let _ = Box::into_raw(path);
+    result
+
+}
+
+
+pub(crate) fn is_point_in_stroke(canvas_ptr: i64, path: i64, x: f32, y: f32) -> bool {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let mut surface = &mut canvas_native.surface;
+    let mut canvas = surface.canvas();
+    let invertible = is_invertible(&canvas.total_matrix());
+    if !invertible { return false; }
+    if !x.is_finite() || !y.is_finite() { return false; }
+    let mut matrix = canvas.total_matrix().clone();
+    let mut inverse = matrix.invert().unwrap();
+    let point = Point::new(x, y);
+    let transformed_point = inverse.map_point(point);
+    let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
+    let mut path_to_compare = path.clone();
+    let result = path_to_compare.contains(transformed_point);
+    let _ = Box::into_raw(canvas_native);
+    let _ = Box::into_raw(path);
+    result
+
+}
+
+
+
 pub struct CanvasStateItem {
     pub(crate) state: i64,
     pub(crate) count: usize,
