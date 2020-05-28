@@ -1,27 +1,27 @@
 extern crate libc;
 
-use crate::common::{adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, clear_canvas, clear_rect, clip_rule, close_path, create_image_data, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, get_image_data, get_measure_text, is_font_size, is_font_weight, line_to, move_to, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color_rgba, set_text_align, set_transform, stroke, transform, translate, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, COLOR_BLACK, create_path_2d, create_path_from_path, create_path_2d_from_path_data, add_path_to_path, add_path_to_path_with_matrix, create_matrix, set_matrix, get_matrix, CanvasArray, fill_path_rule, fill_rule, stroke_path, clip, clip_path_rule, to_data_url, flush, free_path_2d, set_fill_color, set_stroke_color, NativeImageAsset, image_asset_load_from_path, image_asset_load_from_raw, image_asset_get_bytes, image_asset_free_bytes, image_asset_width, image_asset_scale, image_asset_flip_x, image_asset_flip_y, image_asset_save_path, image_asset_height, image_asset_get_error, image_asset_release, image_asset_flip_y_in_place_owned, image_asset_flip_x_in_place_owned, NativeByteArray, TextEncoder, TextDecoder, text_encoder_get_encoding, text_encoder_encode, text_decoder_get_encoding, text_decoder_decode, free_text_decoder, free_text_encoder, get_current_transform, set_current_transform};
+use std::ffi::{c_void, CStr, CString};
+use std::mem;
+use std::os::raw::{c_char, c_uchar, c_uint};
+use std::ptr::{null, null_mut};
+
+use cocoa::foundation::NSAutoreleasePool;
 use libc::{c_float, c_int, c_longlong, size_t};
 use skia_safe::{gpu, IPoint};
-use skia_safe::gradient_shader::GradientShaderColors;
-use skia_safe::paint::{Cap, Join, Style};
 use skia_safe::{
     AlphaType, Bitmap, BlendMode, Budgeted, ClipOp, Color, ColorSpace, ColorType, Data,
-    EncodedImageFormat, Font, FontStyle, FontStyleWeight, IRect, ISize, Image, ImageInfo,
+    EncodedImageFormat, Font, FontStyle, FontStyleWeight, Image, ImageInfo, IRect, ISize,
     Matrix, Paint, Path, PathEffect, PixelGeometry, PixelRef, Pixmap, Point, Rect, Shader, Size,
     SrcRectConstraint, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, TileMode, Typeface,
     Vector,
 };
-use std::ffi::{c_void, CStr};
-use std::mem;
-use std::os::raw::{c_char, c_uint};
-
-use skia_safe::gpu::mtl::TextureInfo;
 use skia_safe::gpu::{BackendRenderTarget, Context, ResourceCacheLimits};
-use std::ptr::{null, null_mut};
-
-use cocoa::foundation::NSAutoreleasePool;
 use skia_safe::gpu::gl::Interface;
+use skia_safe::gpu::mtl::TextureInfo;
+use skia_safe::gradient_shader::GradientShaderColors;
+use skia_safe::paint::{Cap, Join, Style};
+
+use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasArray, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, COLOR_BLACK, create_image_data, create_matrix, create_path_2d, create_path_2d_from_path_data, create_path_from_path, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, fill_path_rule, fill_rule, flush, free_path_2d, free_text_decoder, free_text_encoder, get_current_transform, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_x_in_place_owned, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_weight, is_point_in_path, line_to, move_to, NativeByteArray, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_fill_color, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_text_align, set_transform, stroke, stroke_path, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_data_url, transform, translate, is_point_in_stroke};
 
 struct AutoreleasePool(*mut objc::runtime::Object);
 
@@ -578,6 +578,58 @@ fn update_surface(canvas_native_ptr: c_longlong, view: *mut c_void) -> c_longlon
     canvas_native.surface = surface;
 
     Box::into_raw(Box::new(canvas_native)) as *mut _ as i64
+}
+
+#[no_mangle]
+pub extern "C" fn native_is_point_in_path(canvas_ptr: i64, x: f32, y: f32) -> c_uchar {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let _ = Box::into_raw(canvas_native);
+    let rule = CString::new("nonzero").unwrap().into_raw();
+    let result = native_is_point_in_path_with_path_rule(canvas_ptr, path, x, y, rule);
+    let _ = unsafe { CString::from_raw(rule) };
+    let _ = unsafe { Box::from_raw(path as *mut c_void) };
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn native_is_point_in_path_with_rule(canvas_ptr: i64, x: f32, y: f32, fill_rule: *const c_char) -> c_uchar {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let _ = Box::into_raw(canvas_native);
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let result = native_is_point_in_path_with_path_rule(canvas_ptr, path, x, y, fill_rule);
+    let _ = unsafe { Box::from_raw(path as *mut c_void) };
+    result
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_is_point_in_path_with_path_rule(canvas_ptr: i64, path: i64, x: f32, y: f32, fill_rule: *const c_char) -> c_uchar {
+    let result = is_point_in_path(canvas_ptr, path, x, y, fill_rule);
+    if result { return 1; }
+    return 0;
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_is_point_in_stroke(canvas_ptr: i64, x: f32, y: f32) -> c_uchar {
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let path = canvas_native.path.clone();
+    let _ = Box::into_raw(canvas_native);
+    let path = Box::into_raw(Box::new(path)) as i64;
+    let result = native_is_point_in_stroke_with_path(canvas_ptr, path, x, y);
+    let _ = unsafe { Box::from_raw(path as *mut c_void) };
+    result
+}
+
+
+#[no_mangle]
+pub extern "C" fn native_is_point_in_stroke_with_path(canvas_ptr: i64, path: i64, x: f32, y: f32) -> c_uchar {
+    let result = is_point_in_stroke(canvas_ptr, path, x, y);
+    if result { return 1; }
+    return 0;
 }
 
 #[no_mangle]
