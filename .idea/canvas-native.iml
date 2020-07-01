@@ -204,6 +204,13 @@
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/encoding_rs-78d905c89789bf0b/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-df23c32fc3915d2a/out" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-b4a1a3ffad95df45/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-db7c988bb0e1a651/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-5c01af59bc909edc/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-f4842b34da0fd2c7/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/bindgen-3e86bb4ad945d5a4/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/canvas-native-8cb47db22c43b916/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/libc-e769201b311b2dda/out" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/target/debug/build/proc-macro2-e364a95d24e2cd64/out" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

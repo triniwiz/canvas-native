@@ -42,7 +42,9 @@ impl Display for Target {
 fn main() {
     let target_str = env::var("TARGET").unwrap();
     dbg!("target os {:?}",&target_str);
+    let arm_ndk = "/tmp/ndk_arm";
     let arm_64_ndk = "/tmp/ndk_arm64";
+    let x86_ndk = "/tmp/ndk_x86";
     let x86_64_ndk = "/tmp/ndk_x86_64";
     let mut include_dir = String::from("-I");
     let target: Vec<String> = target_str.split("-").map(|s| s.into()).collect();
@@ -64,19 +66,31 @@ fn main() {
     };
 
     match target.system.borrow() {
-        "android" => {
-            //println!("cargo:rustc-link-lib=c++_shared");
-            println!("cargo:rustc-link-lib=jnigraphics"); // the "-l" flag
-            if target.architecture.eq("arm64") {
+        "android" | "androideabi" => {
+            // println!("cargo:rustc-link-lib=jnigraphics"); // the "-l" flag
+            let build_target;
+            if target.architecture.eq("armv7") {
+                build_target = "armv7-linux-androideabi";
+                include_dir.push_str(arm_ndk);
+            } else if target.architecture.eq("aarch64") {
+                build_target = "aarch64-linux-android";
                 include_dir.push_str(arm_64_ndk);
+            } else if target.architecture.eq("i686") {
+                build_target = "i686-linux-android";
+                include_dir.push_str(x86_ndk);
             } else if target.architecture.eq("x86_64") {
+                build_target = "x86_64-linux-android";
                 include_dir.push_str(x86_64_ndk);
             } else {
                 return;
             }
 
             include_dir.push_str("/sysroot/usr/include");
-
+            println!("cargo:rustc-link-search=native={}", include_dir);
+            println!("cargo:rustc-link-lib=jnigraphics"); // the "-l" flag
+            println!("cargo:rustc-link-lib=EGL"); // the "-l" flag
+            println!("cargo:rustc-link-lib=GLESv2"); // the "-l" flag
+            println!("cargo:rustc-link-lib=GLESv3"); // the "-l" flag
             // The bindgen::Builder is the main entry point
             // to bindgen, and lets you build up options for
             // the resulting bindings.
