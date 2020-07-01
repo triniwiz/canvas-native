@@ -1,38 +1,25 @@
 extern crate libc;
 
-use std::borrow::{Borrow, BorrowMut, Cow};
+use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
 use std::mem;
-use std::ops::Deref;
 use std::os::raw::{c_char, c_uint, c_void};
-use std::ptr::{null, null_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
-
-use encoding_rs::{CoderResult, UTF_8};
-use image::*;
-use image::{GenericImageView, ImageFormat};
-use image::imageops::FilterType;
+use std::ptr::{null, null_mut};
 use libc::{c_float, c_int, c_longlong, size_t};
-use quick_xml::events::Event;
-use quick_xml::Reader;
-use skia_safe::{AddPathMode, AlphaType, Bitmap, BlendMode, BlurStyle, Budgeted, ClipOp, Color, ColorType, Data, EncodedImageFormat, FilterQuality, Font, FontHinting, FontStyle, FontStyleWeight, Image, ImageFilter, ImageInfo, IPoint, IRect, ISize, MaskFilter, Matrix, Paint, Path, PathEffect, Point, Rect, Shader, Size, SrcRectConstraint, Surface, TextBlob, TileMode, Typeface, Vector};
-use skia_safe::font::Edging;
-use skia_safe::gpu::{Context, SurfaceOrigin};
-use skia_safe::gradient_shader::GradientShaderColors;
-use skia_safe::image::CachingHint;
-use skia_safe::image_filters::drop_shadow;
-use skia_safe::paint::{Cap, Join, Style};
-use skia_safe::path::FillType;
-use skia_safe::svg::Canvas;
-use skia_safe::TextEncoding::UTF8;
-use skia_safe::utils::parse_path::from_svg;
-use skia_safe::utils::text_utils::Align;
+use skia_safe::{AlphaType, BlendMode, BlurStyle, ClipOp, Color, ColorType, Data, EncodedImageFormat, FilterQuality, Font, FontStyle, Image, ImageFilter, ImageInfo, IPoint, ISize, MaskFilter, Matrix, Paint, Path, PathEffect, Point, Rect, Shader, Surface, TileMode, Typeface, Vector, canvas::SrcRectConstraint, gpu::Context, gradient_shader::GradientShaderColors, image::CachingHint, image_filters::drop_shadow, paint::{Cap, Join, Style}, path::FillType, utils::text_utils::Align, Size};
+//use skia_safe::wrapper::PointerWrapper;
+use skia_safe::wrapper::ValueWrapper;
+//use skia_safe::wrapper::NativeTransmutableWrapper;
+//use skia_safe::wrapper::RefWrapper;
 
-pub const COLOR_BLACK: u32 = 0xff000000 as usize as u32;
+pub const COLOR_BLACK: usize = 0xff000000 as usize;
+pub const COLOR_WHITE: usize = 0xffffffff as usize;
+pub const COLOR_TRANSPARENT: usize = 0x00000000 as usize;
 
 const SK_SCALAR1: f32 = 1.0;
-const SK_SCALAR_NEARLY_ZERO: f32 = (SK_SCALAR1 / (1 << 12) as f32);
+const SK_SCALAR_NEARLY_ZERO: f32 = SK_SCALAR1 / (1 << 12) as f32;
 const PI_FLOAT: f32 = std::f32::consts::PI;
-const TWO_PI_FLOAT: f32 = (PI_FLOAT * 2.0);
+const TWO_PI_FLOAT: f32 = PI_FLOAT * 2.0;
 
 fn sk_scalar_abs(x: f32) -> f32 {
     x.abs()
@@ -142,54 +129,67 @@ fn is_invertible(matrix: &Matrix) -> bool {
     return det(matrix) != 0.0;
 }
 
-
-pub(crate) fn is_point_in_path(canvas_ptr: i64, path: i64, x: f32, y: f32, fill_rule: *const c_char) -> bool {
+#[inline]
+pub(crate) fn is_point_in_path(
+    canvas_ptr: i64,
+    path: i64,
+    x: f32,
+    y: f32,
+    fill_rule: *const c_char,
+) -> bool {
     let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let invertible = is_invertible(&canvas.total_matrix());
-    if !invertible { return false; }
-    if !x.is_finite() || !y.is_finite() { return false; }
-    let mut matrix = canvas.total_matrix().clone();
-    let mut inverse = matrix.invert().unwrap();
+    if !invertible {
+        return false;
+    }
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let matrix = canvas.total_matrix().clone();
+    let inverse = matrix.invert().unwrap();
     let point = Point::new(x, y);
     let transformed_point = inverse.map_point(point);
-    let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
-    let mut path_to_compare =path.clone();
-    let fill = match unsafe { CStr::from_ptr(fill_rule) }.to_str().unwrap_or("nonzero") {
+    let path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
+    let mut path_to_compare = path.clone();
+    let fill = match unsafe { CStr::from_ptr(fill_rule) }
+        .to_str()
+        .unwrap_or("nonzero")
+    {
         "evenodd" => FillType::EvenOdd,
-        _ => FillType::Winding
+        _ => FillType::Winding,
     };
     path_to_compare.set_fill_type(fill);
     let result = path_to_compare.contains(transformed_point);
     let _ = Box::into_raw(canvas_native);
     let _ = Box::into_raw(path);
     result
-
 }
 
-
+#[inline]
 pub(crate) fn is_point_in_stroke(canvas_ptr: i64, path: i64, x: f32, y: f32) -> bool {
     let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let invertible = is_invertible(&canvas.total_matrix());
-    if !invertible { return false; }
-    if !x.is_finite() || !y.is_finite() { return false; }
-    let mut matrix = canvas.total_matrix().clone();
-    let mut inverse = matrix.invert().unwrap();
+    if !invertible {
+        return false;
+    }
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let matrix = canvas.total_matrix().clone();
+    let inverse = matrix.invert().unwrap();
     let point = Point::new(x, y);
     let transformed_point = inverse.map_point(point);
-    let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
-    let mut path_to_compare = path.clone();
+    let path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
+    let path_to_compare = path.clone();
     let result = path_to_compare.contains(transformed_point);
     let _ = Box::into_raw(canvas_native);
     let _ = Box::into_raw(path);
     result
-
 }
-
-
 
 pub struct CanvasStateItem {
     pub(crate) state: i64,
@@ -213,10 +213,10 @@ pub struct CanvasArray {
     pub length: size_t,
 }
 
-#[repr(C)]
-pub struct SVGCanvasNative {
-    pub(crate) surface: Surface,
-    pub(crate) context: Option<Context>,
+#[derive(Copy, Clone)]
+pub enum SurfaceKind {
+    CPU,
+    GPU,
 }
 
 #[repr(C)]
@@ -238,6 +238,12 @@ pub struct CanvasNative {
     pub(crate) device_scale: f32,
     pub(crate) text_align: String,
     pub(crate) ios: c_longlong,
+    pub(crate) global_composite_operation: CanvasCompositeOperationType,
+    pub(crate) line_cap: String,
+    pub(crate) line_join: String,
+    pub(crate) direction: String,
+    pub(crate) miter_limit: f32,
+    pub(crate) surface_kind: SurfaceKind,
 }
 
 impl CanvasNative {
@@ -256,6 +262,12 @@ impl CanvasNative {
         self.device_scale = state.device_scale;
         self.text_align = state.text_align;
         self.ios = state.ios;
+        self.global_composite_operation = state.global_composite_operation;
+        self.line_cap = state.line_cap;
+        self.line_join = state.line_join;
+        self.direction = state.direction;
+        self.miter_limit = state.miter_limit;
+        self.surface_kind = state.surface_kind;
     }
 
     pub fn restore_from_state_box(&mut self, state: Box<CanvasState>) {
@@ -268,13 +280,17 @@ impl CanvasNative {
         self.shadow_color = state.shadow_color;
         self.shadow_offset_x = state.shadow_offset_x;
         self.shadow_offset_y = state.shadow_offset_y;
-        self.image_smoothing_enabled =
-            state.image_smoothing_enabled
-        ;
+        self.image_smoothing_enabled = state.image_smoothing_enabled;
         self.image_smoothing_quality = state.image_smoothing_quality;
         self.device_scale = state.device_scale;
         self.text_align = state.text_align;
         self.ios = state.ios;
+        self.global_composite_operation = state.global_composite_operation;
+        self.line_cap = state.line_cap;
+        self.line_join = state.line_join;
+        self.direction = state.direction;
+        self.miter_limit = state.miter_limit;
+        self.surface_kind = state.surface_kind;
     }
 
     //pub fn restore_from_state_ptr(&mut self, state: *mut u8){}
@@ -294,6 +310,12 @@ impl CanvasNative {
         self.device_scale = canvas.device_scale;
         self.text_align = canvas.text_align;
         self.ios = canvas.ios;
+        self.global_composite_operation = canvas.global_composite_operation;
+        self.line_cap = canvas.line_cap;
+        self.line_join = canvas.line_join;
+        self.direction = canvas.direction;
+        self.miter_limit = canvas.miter_limit;
+        self.surface_kind = canvas.surface_kind;
     }
 }
 
@@ -313,6 +335,12 @@ pub struct CanvasState {
     pub(crate) device_scale: f32,
     pub(crate) text_align: String,
     pub(crate) ios: c_longlong,
+    pub(crate) global_composite_operation: CanvasCompositeOperationType,
+    pub(crate) line_cap: String,
+    pub(crate) line_join: String,
+    pub(crate) direction: String,
+    pub(crate) miter_limit: f32,
+    pub(crate) surface_kind: SurfaceKind,
 }
 
 pub fn is_font_weight(text: &str) -> bool {
@@ -339,6 +367,7 @@ pub fn is_font_size(text: &str) -> bool {
     return text.contains("px");
 }
 
+#[derive(Clone, Debug)]
 pub enum CanvasCompositeOperationType {
     SourceOver,
     SourceIn,
@@ -438,578 +467,216 @@ pub struct NativeByteArray {
     pub length: size_t,
 }
 
-
-#[repr(C)]
-pub struct NativeImageAsset {
-    image: *mut c_void,
-    error: *mut c_char,
-}
-
-#[repr(C)]
-pub enum PixelType {
-    RGB,
-    RGBA,
+#[inline]
+pub(crate) fn free_char(text: *const c_char) {
+    if !text.is_null() {
+        unsafe { CStr::from_ptr(text); }
+    }
 }
 
 #[repr(C)]
-pub enum OutputFormat {
-    JPG = 0,
-    PNG = 1,
-    ICO = 2,
-    BMP = 3,
-    TIFF = 4,
+pub struct CanvasPattern {
+    image: Image,
+    repetition: String,
+    matrix: Matrix,
 }
 
-impl From<u32> for OutputFormat {
-    fn from(format: u32) -> Self {
-        match format {
-            1 => OutputFormat::PNG,
-            2 => OutputFormat::ICO,
-            3 => OutputFormat::BMP,
-            4 => OutputFormat::TIFF,
-            _ => OutputFormat::JPG
-        }
+#[inline]
+pub(crate) fn free_pattern(pattern: c_longlong) {
+    if pattern != 0 {
+        let _: Box<CanvasPattern> = unsafe { Box::from_raw(pattern as *mut _) };
     }
 }
 
-pub(crate) fn to_byte_slice(buf: &mut [i8]) -> &mut [u8] {
-    unsafe { &mut *(buf as *mut [i8] as *mut [u8]) }
-}
-
-impl NativeImageAsset {
-    pub fn new() -> Self {
-        Self { image: null_mut(), error: null_mut() }
-    }
-
-    pub fn error(&self) -> *const c_char {
-        self.error
-    }
-
-    pub fn width(&self) -> c_uint {
-        let mut width = 0;
-        let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        width = image.width();
-        let _ = Box::into_raw(Box::new(image)) as *mut _;
-        width
-    }
-
-    pub fn height(&self) -> c_uint {
-        let mut height = 0;
-        let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        height = image.height();
-        let _ = Box::into_raw(Box::new(image)) as *mut _;
-        height
-    }
-
-
-    pub fn load_from_path(&mut self, path: *const c_char) -> c_uint {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let _: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        }
-        let real_path = unsafe { CStr::from_ptr(path) }.to_str().unwrap_or("");
-        let result = image::open(real_path);
-        match result {
-            Ok(result) => {
-                self.image = Box::into_raw(Box::new(result)) as *mut _;
-                1
-            }
-            Err(e) => {
-                self.error = CString::new(e.to_string()).unwrap().into_raw();
-                0
-            }
-        }
-    }
-
-    pub fn load_from_raw(&mut self, buffer: *const u8, size: size_t) -> c_uint {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let _: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        }
-        let buf = unsafe { std::slice::from_raw_parts(buffer, size) };
-        let result = image::load_from_memory(buf);
-        match result {
-            Ok(result) => {
-                self.image = Box::into_raw(Box::new(result)) as *mut _;
-                1
-            }
-            Err(e) => {
-                self.error = CString::new(e.to_string()).unwrap().into_raw();
-                0
-            }
-        }
-    }
-
-    pub fn load_from_bytes(&mut self, buf: &[u8]) -> c_uint {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let _: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        }
-        let result = image::load_from_memory(buf);
-        match result {
-            Ok(result) => {
-                self.image = Box::into_raw(Box::new(result)) as *mut _;
-                1
-            }
-            Err(e) => {
-                self.error = CString::new(e.to_string()).unwrap().into_raw();
-                0
-            }
-        }
-    }
-
-    pub fn load_from_bytes_int(&mut self, buf: &mut [i8]) -> c_uint {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let _: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-        }
-        let buf = unsafe { &*(buf as *mut [i8] as *mut [u8]) };
-        let result = image::load_from_memory(buf);
-        match result {
-            Ok(result) => {
-                self.image = Box::into_raw(Box::new(result)) as *mut _;
-                1
-            }
-            Err(e) => {
-                self.error = CString::new(e.to_string()).unwrap().into_raw();
-                0
-            }
-        }
-    }
-
-    pub fn scale(&mut self, x: c_uint, y: c_uint) {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-            image.resize(x, y, FilterType::Triangle);
-            Box::into_raw(image);
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-        }
-    }
-
-    pub fn flip_x(&mut self) {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-            image.fliph();
-            Box::into_raw(image);
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-        }
-    }
-
-    pub fn flip_x_in_place(&mut self) -> c_longlong {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        return if !self.image.is_null() {
-            let mut image: image::DynamicImage = unsafe { *Box::from_raw(self.image as *mut _) };
-            image::imageops::flip_horizontal_in_place(&mut image);
-            Box::into_raw(Box::new(image)) as *mut _ as i64
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-            0
-        };
-    }
-
-    pub fn flip_y(&mut self) {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-            image.flipv();
-            Box::into_raw(image);
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-        }
-    }
-
-    pub fn flip_y_in_place(&mut self) -> c_longlong {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        return if !self.image.is_null() {
-            let mut image: image::DynamicImage = unsafe { *Box::from_raw(self.image as *mut _) };
-            image::imageops::flip_vertical_in_place(&mut image);
-            Box::into_raw(Box::new(image)) as *mut _ as i64
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-            0
-        };
-    }
-
-    pub fn bytes(&mut self) -> NativeByteArray {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-            let image_ref = image.to_rgba();
-            let mut raw = image_ref.into_raw();
-            let mut pixels = raw.into_boxed_slice();
-            let raw_pixels = pixels.as_mut_ptr();
-            let size = pixels.len();
-            mem::forget(pixels);
-            Box::into_raw(image);
-            NativeByteArray {
-                array: raw_pixels,
-                length: size,
-            }
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-            NativeByteArray {
-                array: null_mut(),
-                length: 0,
-            }
-        }
-    }
-
-    pub fn save_path(&mut self, path: *const c_char, format: OutputFormat) -> c_uint {
-        if !self.error.is_null() {
-            unsafe { CString::from_raw(self.error) };
-        }
-        self.error = null_mut();
-        if !self.image.is_null() {
-            let mut image: Box<image::DynamicImage> = unsafe { Box::from_raw(self.image as *mut _) };
-            let format = match format {
-                OutputFormat::PNG => ImageFormat::Png,
-                OutputFormat::ICO => ImageFormat::Ico,
-                OutputFormat::BMP => ImageFormat::Bmp,
-                OutputFormat::TIFF => ImageFormat::Tiff,
-                _ => ImageFormat::Jpeg
-            };
-            let real_path = unsafe { CStr::from_ptr(path) }.to_str().unwrap_or("");
-            let done = match image.save_with_format(real_path, format) {
-                Ok(_) => 1,
-                _ => 0
-            };
-            Box::into_raw(image);
-            done
-        } else {
-            self.error = CString::new("No Image loaded").unwrap().into_raw();
-            0
-        }
-    }
-
-
-    pub fn free_image_data(data: NativeByteArray) {
-        let mut array = unsafe { std::slice::from_raw_parts_mut(data.array, data.length) };
-        let ptr = array.as_mut_ptr();
-        unsafe { Box::from_raw(ptr); }
-    }
-}
-
-pub(crate) fn create_image_asset() -> c_longlong {
-    Box::into_raw(Box::new(NativeImageAsset::new())) as *mut _ as i64
-}
-
-pub(crate) fn image_asset_load_from_path(asset: c_longlong, path: *const c_char) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.load_from_path(path);
-    Box::into_raw(native_asset);
-    result
-}
-
-pub(crate) fn image_asset_load_from_raw(asset: c_longlong, array: *const u8, size: size_t) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.load_from_raw(array, size);
-    Box::into_raw(native_asset);
-    result
-}
-
-pub(crate) fn image_asset_load_from_slice_i8(asset: c_longlong, array: &mut [i8]) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.load_from_bytes_int(array);
-    Box::into_raw(native_asset);
-    result
-}
-
-
-pub(crate) fn image_asset_get_bytes(asset: c_longlong) -> NativeByteArray {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.bytes();
-    Box::into_raw(native_asset);
-    result
-}
-
-pub(crate) fn image_asset_free_bytes(data: NativeByteArray) {
-    NativeImageAsset::free_image_data(data);
-}
-
-
-pub(crate) fn image_asset_width(asset: c_longlong) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.width();
-    Box::into_raw(native_asset);
-    result
-}
-
-
-pub(crate) fn image_asset_height(asset: c_longlong) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.height();
-    Box::into_raw(native_asset);
-    result
-}
-
-
-pub(crate) fn image_asset_get_error(asset: c_longlong) -> *const c_char {
-    if asset == 0 { return null(); }
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.error();
-    Box::into_raw(native_asset);
-    result
-}
-
-pub(crate) fn image_asset_scale(asset: c_longlong, x: c_uint, y: c_uint) -> c_longlong {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    native_asset.scale(x, y);
-    Box::into_raw(native_asset) as *mut _ as i64
-}
-
-
-pub(crate) fn image_asset_flip_x(asset: c_longlong) -> c_longlong {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    native_asset.flip_x();
-    Box::into_raw(native_asset) as *mut _ as i64
-}
-
-pub(crate) fn image_asset_flip_x_in_place(asset: c_longlong) -> c_longlong {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    native_asset.flip_x_in_place();
-    Box::into_raw(native_asset) as *mut _ as i64
-}
-
-pub(crate) fn image_asset_flip_y(asset: c_longlong) -> c_longlong {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    native_asset.flip_y();
-    Box::into_raw(native_asset) as *mut _ as i64
-}
-
-pub(crate) fn image_asset_flip_y_in_place_owned(width: u32, height: u32, buf: *mut u8, length: usize) {
-    let mut buffer = unsafe { std::slice::from_raw_parts_mut(buf, length) };
-    let mut image = image::load_from_memory(buffer).unwrap();
-    image::imageops::flip_vertical_in_place(&mut image);
-}
-
-pub(crate) fn image_asset_flip_x_in_place_owned(width: u32, height: u32, buf: *mut u8, length: usize) {
-    let mut buffer = unsafe { std::slice::from_raw_parts_mut(buf, length) };
-    let mut image = image::load_from_memory(buffer).unwrap();
-    image::imageops::flip_horizontal_in_place(&mut image);
-}
-
-
-pub(crate) fn image_asset_flip_y_in_place(asset: c_longlong) -> c_longlong {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    native_asset.flip_y_in_place();
-    Box::into_raw(native_asset) as *mut _ as i64
-}
-
-pub(crate) fn image_asset_save_path(asset: c_longlong, path: *const c_char, format: c_uint) -> c_uint {
-    let mut native_asset: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-    let result = native_asset.save_path(path, OutputFormat::from(format));
-    Box::into_raw(native_asset) as *mut _ as i64;
-    result
-}
-
-pub(crate) fn image_asset_release(asset: c_longlong) {
-    let _: Box<NativeImageAsset> = unsafe { Box::from_raw(asset as *mut _) };
-}
-
-
-#[repr(C)]
-pub struct TextDecoder {
-    decoder: &'static encoding_rs::Encoding
-}
-
-impl TextDecoder {
-    pub fn new(decoding: *const c_char) -> Self {
-        let decoding = unsafe { CStr::from_ptr(decoding) }.to_str().unwrap_or("utf-8");
-        let decoder = encoding_rs::Encoding::for_label(decoding.as_bytes()).unwrap_or(UTF_8.output_encoding());
-        Self { decoder }
-    }
-
-    pub fn decode(&mut self, data: *const u8, len: size_t) -> *const c_char {
-        let txt = unsafe { std::slice::from_raw_parts(data, len) };
-        let (value, errors) = self.decoder.decode_with_bom_removal(txt);
-        let string = String::from(value.clone());
-        let result = CString::new(string);
-        match result {
-            Ok(result) => {
-                result.into_raw()
-            }
-            Err(err) => {
-                dbg!("error {:?}", err.to_string());
-                null()
-            }
-        }
-    }
-
-
-    /*
-
-    pub fn decode(&mut self, data: *const u8, len: size_t) -> *const c_char {
-        let txt = unsafe { std::slice::from_raw_parts(data, len) };
-        let decoder = self.decoder.new_decoder_with_bom_removal();
-        let result = self.decoder.decode_with_bom_removal(txt);
-        let raw = result.0;
-        let string = String::from(raw);
-        let result = CString::new(string);
-        match result {
-            Ok(result) => result.into_raw(),
-            Err(err) => {
-                dbg!("error {:?}", err.to_string());
-                null()
-            }
-        }
-    }
-     */
-
-    pub fn encoding(&self) -> *const c_char {
-        CString::new(self.decoder.name()).unwrap().into_raw()
-    }
-
-    pub fn release(ptr: c_longlong) {
-        if ptr != 0 {
-            let _: Box<TextDecoder> = unsafe { Box::from_raw(ptr as *mut _) };
-        }
-    }
-}
-
-pub(crate) fn text_decoder_get_encoding(decoder: c_longlong) -> *const c_char {
-    if decoder != 0 {
-        let decoder: Box<TextDecoder> = unsafe { Box::from_raw(decoder as *mut _) };
-        let encoding = decoder.encoding();
-        Box::into_raw(decoder);
-        return encoding;
-    }
-    null()
-}
-
-pub(crate) fn text_decoder_decode(decoder: c_longlong, data: *const u8, len: size_t) -> *const c_char {
-    if decoder != 0 {
-        let mut decoder: Box<TextDecoder> = unsafe { Box::from_raw(decoder as *mut _) };
-        let decoded = decoder.decode(data, len);
-        Box::into_raw(decoder);
-        return decoded;
-    }
-    null()
-}
-
-pub(crate) fn free_text_decoder(decoder: i64) {
-    TextDecoder::release(decoder);
-}
-
-
-#[repr(C)]
-pub struct TextEncoder {
-    encoder: &'static encoding_rs::Encoding
-}
-
-impl TextEncoder {
-    pub fn new(encoding: *const c_char) -> Self {
-        let encoding = unsafe { CStr::from_ptr(encoding) }.to_str().unwrap_or("utf-8");
-        let encoder = encoding_rs::Encoding::for_label(encoding.as_bytes()).unwrap_or(UTF_8.output_encoding());
-        Self { encoder }
-    }
-
-    pub fn encode(&mut self, text: *const c_char) -> NativeByteArray {
-        let txt = unsafe { CStr::from_ptr(text) }.to_str().unwrap_or("");
-        let result = self.encoder.encode(txt);
-        let mut data = Vec::from(result.0).into_boxed_slice();
-        let array = NativeByteArray {
-            array: data.as_mut_ptr(),
-            length: data.len(),
-        };
-        mem::forget(data);
-        array
-    }
-
-    pub fn encoding(&self) -> *const c_char {
-        CString::new(self.encoder.name()).unwrap().into_raw()
-    }
-
-    pub fn release(ptr: c_longlong) {
-        if ptr != 0 {
-            let _: Box<TextEncoder> = unsafe { Box::from_raw(ptr as *mut _) };
-        }
-    }
-}
-
-pub(crate) fn text_encoder_get_encoding(encoder: c_longlong) -> *const c_char {
-    if encoder != 0 {
-        let encoder: Box<TextEncoder> = unsafe { Box::from_raw(encoder as *mut _) };
-        let encoding = encoder.encoding();
-        Box::into_raw(encoder);
-        return encoding;
-    }
-    null()
-}
-
-pub(crate) fn text_encoder_encode(encoder: c_longlong, text: *const c_char) -> NativeByteArray {
-    if encoder != 0 {
-        let mut encoder: Box<TextEncoder> = unsafe { Box::from_raw(encoder as *mut _) };
-        let buffer = encoder.encode(text);
-        Box::into_raw(encoder);
-        return buffer;
-    }
-    NativeByteArray {
-        array: null_mut(),
-        length: 0,
-    }
-}
-
-pub(crate) fn free_byte_array(array: NativeByteArray) {
-    if array.array.is_null() || array.length == 0 { return; }
-    let mut raw = unsafe { std::slice::from_raw_parts_mut(array.array, array.length) };
-    let _ = unsafe { Box::from_raw(raw) }.to_vec();
-}
-
-pub(crate) fn free_text_encoder(encoder: i64) {
-    TextEncoder::release(encoder);
+#[inline]
+pub(crate) fn create_pattern(
+    image_data: *const u8,
+    image_size: size_t,
+    original_width: c_int,
+    original_height: c_int,
+    repetition: *const c_char,
+) -> c_longlong {
+    let image_slice: &[u8] = unsafe { std::slice::from_raw_parts(image_data, image_size) };
+    let data = Data::new_copy(image_slice);
+    let info = ImageInfo::new(
+        ISize::new(original_width, original_height),
+        ColorType::RGBA8888,
+        AlphaType::Premul,
+        None,
+    );
+    let image_new = Image::from_raster_data(&info, data, (original_width * 4) as usize);
+    let rep = unsafe { CStr::from_ptr(repetition) }
+        .to_str()
+        .unwrap_or("repeat");
+    Box::into_raw(Box::new(CanvasPattern {
+        image: image_new.unwrap(),
+        repetition: String::from(rep),
+        matrix: Matrix::default(),
+    })) as i64
 }
 
 
 #[inline]
-pub(crate) fn flush(canvas_ptr: c_longlong) -> c_longlong {
-    if canvas_ptr == 0 { return 0; }
-    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    surface.flush();
-    // surface.flush();
-    let mut ctx = canvas_native.context.unwrap();
-    //ctx.flush();
-    canvas_native.context = Some(ctx);
+pub(crate) fn create_pattern_encoded(
+    image_data: *const u8,
+    image_size: size_t,
+    repetition: *const c_char,
+) -> c_longlong {
+    let image_slice: &[u8] = unsafe { std::slice::from_raw_parts(image_data, image_size) };
+    let data = Data::new_copy(image_slice);
+    let image_new = Image::from_encoded(data, None);
+    let rep = unsafe { CStr::from_ptr(repetition) }
+        .to_str()
+        .unwrap_or("repeat");
+
+    Box::into_raw(Box::new(CanvasPattern {
+        image: image_new.unwrap(),
+        repetition: String::from(rep),
+        matrix: Matrix::default(),
+    })) as i64
+}
+
+
+#[inline]
+pub(crate) fn set_fill_pattern(canvas_native_ptr: c_longlong, pattern: c_longlong) -> c_longlong {
+    set_pattern(canvas_native_ptr, pattern, true)
+}
+
+#[inline]
+pub(crate) fn set_stroke_pattern(canvas_native_ptr: c_longlong, pattern: c_longlong) -> c_longlong {
+    set_pattern(canvas_native_ptr, pattern, false)
+}
+
+#[inline]
+fn set_pattern(canvas_native_ptr: c_longlong, pattern: c_longlong, is_fill: bool) -> c_longlong {
+    if canvas_native_ptr == 0 {
+        return 0;
+    }
+    let mut canvas_native: Box<CanvasNative> =
+        unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
+    let pat: Box<CanvasPattern> = unsafe { Box::from_raw(pattern as *mut _) };
+    let mode: (TileMode, TileMode) = match pat.repetition.as_str() {
+        "no-repeat" => (TileMode::Clamp, TileMode::Clamp),
+        "repeat-x" => (TileMode::Repeat, TileMode::Clamp),
+        "repeat-y" => (TileMode::Clamp, TileMode::Repeat),
+        _ => (TileMode::Repeat, TileMode::Repeat),
+    };
+    let shader = pat.image.to_shader(mode, &pat.matrix);
+    if is_fill {
+        canvas_native.fill_paint.set_shader(Some(shader));
+    } else {
+        canvas_native.stroke_paint.set_shader(Some(shader));
+    }
+
+    Box::into_raw(pat);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
+pub(crate) fn set_pattern_transform(pattern: c_longlong, matrix: c_longlong) -> c_longlong {
+    if pattern == 0 || matrix == 0 {
+        return pattern;
+    }
+    let mut pat: Box<CanvasPattern> = unsafe { Box::from_raw(pattern as *mut _) };
+    let mat: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
+    let affine = &mat.to_affine().unwrap();
+    pat.matrix.set_affine(affine);
+    Box::into_raw(mat);
+    Box::into_raw(pat) as i64
+}
+
+#[inline]
+pub(crate) fn set_direction(canvas_native_ptr: c_longlong, direction: *const c_char) -> c_longlong {
+    if canvas_native_ptr == 0 {
+        return canvas_native_ptr;
+    }
+    let mut canvas: Box<CanvasNative> = unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
+    let direction = unsafe { CStr::from_ptr(direction) }.to_str().unwrap_or("ltr");
+    canvas.direction = String::from(direction);
+    Box::into_raw(canvas) as i64
+}
+
+#[inline]
+pub(crate) fn get_direction(canvas_native_ptr: c_longlong) -> *const c_char {
+    if canvas_native_ptr == 0 {
+        return null();
+    }
+    let canvas: Box<CanvasNative> = unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
+    let direction = canvas.direction.clone();
+    let str = CString::new(direction).unwrap();
+    Box::into_raw(canvas);
+    str.into_raw()
+}
+
+#[inline]
+pub(crate) fn flush(canvas_ptr: c_longlong) -> c_longlong {
+    if canvas_ptr == 0 {
+        return 0;
+    }
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    canvas.flush();
+    Box::into_raw(canvas_native) as *mut _ as i64
+}
+
+
+#[inline]
+pub(crate) fn flush_custom_surface(canvas_ptr: c_longlong, width: i32, height: i32, dst: &mut [u8]) -> c_longlong {
+    if canvas_ptr == 0 {
+        return 0;
+    }
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    canvas.flush();
+    let snapshot = surface.image_snapshot();
+    let info = ImageInfo::new(
+        ISize::new(width, height),
+        ColorType::RGBA8888,
+        AlphaType::Premul,
+        None,
+    );
+
+    let mut dst_surface = Surface::new_raster_direct(&info, dst, None, None).unwrap();
+    //dst_surface.draw(canvas, Size::new(width as f32, height as f32), None);
+    let mut dst_canvas = dst_surface.canvas();
+    dst_canvas.draw_image(snapshot, Point::new(0f32, 0f32), None);
+    dst_surface.flush();
+    Box::into_raw(canvas_native) as *mut _ as i64
+}
+
+#[inline]
+pub(crate) fn snapshot_canvas(canvas_ptr: c_longlong) -> NativeByteArray {
+    if canvas_ptr == 0 {
+        return NativeByteArray { array: null_mut(), length: 0 };
+    }
+    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let surface = &mut canvas_native.surface;
+    let snapshot = surface.image_snapshot();
+    let data = snapshot.encode_to_data(EncodedImageFormat::PNG).unwrap();
+    let bytes = data.as_bytes();
+    let mut image_box = Vec::from(bytes).into_boxed_slice();
+    let array = NativeByteArray {
+        array: image_box.as_mut_ptr(),
+        length: image_box.len(),
+    };
+    Box::into_raw(canvas_native);
+    mem::forget(image_box);
+    array
+}
+
+#[inline]
+pub(crate) fn free_snapshot(ss: c_longlong) {
+    if ss != 0 {
+        let _: Box<Data> = unsafe { Box::from_raw(ss as _) };
+    }
+}
+
+#[inline]
 pub(crate) fn to_data(canvas_ptr: c_longlong) -> Vec<u8> {
     let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let width = surface.width();
     let height = surface.height();
     let image = surface.image_snapshot();
@@ -1032,22 +699,31 @@ pub(crate) fn to_data(canvas_ptr: c_longlong) -> Vec<u8> {
     pixels
 }
 
-pub(crate) fn to_data_url(canvas_ptr: c_longlong, format: *const c_char, quality: c_int) -> *mut c_char {
+#[inline]
+pub(crate) fn to_data_url(
+    canvas_ptr: c_longlong,
+    format: *const c_char,
+    quality: c_int,
+) -> *mut c_char {
     let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let image = surface.image_snapshot();
     Box::into_raw(canvas_native);
     let mut quality = quality;
     if quality > 100 || quality < 0 {
         quality = 92;
     }
-    let format = unsafe { CStr::from_ptr(format) }.to_str().unwrap_or("image/png");
-    let mut native_format = match format {
+    let format = unsafe { CStr::from_ptr(format) }
+        .to_str()
+        .unwrap_or("image/png");
+    let native_format = match format {
         "image/jpg" | "image/jpeg" => EncodedImageFormat::JPEG,
         "image/webp" => EncodedImageFormat::WEBP,
         "image/gif" => EncodedImageFormat::GIF,
-        "image/heif" | "image/heic" | "image/heif-sequence" | "image/heic-sequence" => EncodedImageFormat::HEIF,
-        _ => EncodedImageFormat::PNG
+        "image/heif" | "image/heic" | "image/heif-sequence" | "image/heic-sequence" => {
+            EncodedImageFormat::HEIF
+        }
+        _ => EncodedImageFormat::PNG,
     };
     let data = image.encode_to_data_with_quality(native_format, quality);
     let mut encoded_prefix = String::new();
@@ -1072,10 +748,12 @@ pub(crate) fn to_data_url(canvas_ptr: c_longlong, format: *const c_char, quality
     data.into_raw()
 }
 
+#[inline]
 pub(crate) fn create_matrix() -> c_longlong {
     Box::into_raw(Box::new(Matrix::default())) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_matrix(matrix: c_longlong, array: *const c_void, length: size_t) -> c_longlong {
     let mut m_trix: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
     let slice = unsafe { std::slice::from_raw_parts(array as *const f32, length) };
@@ -1086,11 +764,12 @@ pub(crate) fn set_matrix(matrix: c_longlong, array: *const c_void, length: size_
     Box::into_raw(m_trix) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn get_matrix(matrix: c_longlong) -> Vec<f32> {
-    let mut m_trix: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
+    let m_trix: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
     // TODO should we fallback??
     let fallback = Matrix::default();
-    let mut matrix = m_trix.to_affine();
+    let matrix = m_trix.to_affine();
     let _ = Box::into_raw(m_trix) as *mut _ as i64;
     if let Some(matrix) = matrix {
         return matrix.to_vec();
@@ -1100,23 +779,25 @@ pub(crate) fn get_matrix(matrix: c_longlong) -> Vec<f32> {
     }
 }
 
+#[inline]
 pub(crate) fn free_matrix(matrix: c_longlong) {
     let _: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
 }
 
-
+#[inline]
 pub(crate) fn create_path_2d() -> c_longlong {
-    let mut path = Path::new();
-    Box::into_raw(Box::new(path)) as i64
+    Box::into_raw(Box::new(Path::new())) as i64
 }
 
+#[inline]
 pub(crate) fn create_path_from_path(path_2d_ptr: c_longlong) -> c_longlong {
-    let mut path: Box<Path> = unsafe { Box::from_raw(path_2d_ptr as *mut _) };
-    let mut copy = path.clone();
-    Box::into_raw(path) as *mut _ as i64;
-    Box::into_raw(copy) as *mut _ as i64
+    let path: Box<Path> = unsafe { Box::from_raw(path_2d_ptr as *mut _) };
+    let copy = path.clone();
+    Box::into_raw(path);
+    Box::into_raw(copy) as i64
 }
 
+#[inline]
 pub(crate) fn create_path_2d_from_path_data(text: *const c_char) -> c_longlong {
     let data = unsafe { CStr::from_ptr(text as *mut _).to_str().unwrap_or("") };
     let path = Path::from_svg(data);
@@ -1126,22 +807,25 @@ pub(crate) fn create_path_2d_from_path_data(text: *const c_char) -> c_longlong {
     0
 }
 
+#[inline]
 pub(crate) fn free_path_2d(path_2d_ptr: c_longlong) {
     let _: Box<Path> = unsafe { Box::from_raw(path_2d_ptr as *mut _) };
 }
 
+#[inline]
 pub(crate) fn set_current_transform(canvas_native_ptr: c_longlong, matrix: i64) -> i64 {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut transformation: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
+    let transformation: Box<Matrix> = unsafe { Box::from_raw(matrix as *mut _) };
     canvas_native.surface.canvas().set_matrix(&transformation);
     let _ = Box::into_raw(transformation);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn get_current_transform(canvas_native_ptr: c_longlong) -> i64 {
     if canvas_native_ptr == 0 {
         return 0;
@@ -1153,6 +837,7 @@ pub(crate) fn get_current_transform(canvas_native_ptr: c_longlong) -> i64 {
     Box::into_raw(Box::new(matrix)) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn draw_rect(
     canvas_native_ptr: c_longlong,
     x: c_float,
@@ -1167,18 +852,11 @@ pub(crate) fn draw_rect(
 
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let rect = Rect::new(x, y, width + x, height + y);
-    // let mut shadow_rect = rect.clone();
-    // shadow_rect.left = rect.left + canvas_native.shadow_offset_x;
-    // shadow_rect.top = rect.right + canvas_native.shadow_offset_y;
-
     let mut filter: Option<ImageFilter> = None;
-    if canvas_native.shadow_color > 0
-        && (canvas_native.shadow_blur > 0.0
-        || canvas_native.shadow_offset_x > 0.0
-        || canvas_native.shadow_offset_y > 0.0)
+    if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
     {
         // sigma
         // canvas_native.shadow_blur * 0.5
@@ -1200,11 +878,13 @@ pub(crate) fn draw_rect(
     let valid_w = width > 0.0;
     let valid_h = height > 0.0;
     if valid_w && valid_h {
+        let tmp_paint;
         if is_stoke {
-            &canvas.draw_rect(rect, &canvas_native.stroke_paint);
+            tmp_paint = canvas_native.stroke_paint.clone();
         } else {
-            &canvas.draw_rect(rect, &canvas_native.fill_paint);
+            tmp_paint = canvas_native.fill_paint.clone();
         }
+        &canvas.draw_rect(rect, &tmp_paint);
     } else if valid_w || valid_h {
         // we are expected to respect the lineJoin, so we can't just call
         // drawLine -- we have to create a path that doubles back on itself.
@@ -1213,17 +893,25 @@ pub(crate) fn draw_rect(
         path.line_to(Point::new(rect.right, rect.bottom));
         path.close();
 
+        let tmp_paint;
         if is_stoke {
-            &canvas.draw_path(&path, &canvas_native.stroke_paint);
+            tmp_paint = canvas_native.stroke_paint.clone();
         } else {
-            &canvas.draw_path(&path, &canvas_native.fill_paint);
+            tmp_paint = canvas_native.fill_paint.clone();
         }
+        &canvas.draw_path(&path, &tmp_paint);
     }
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+fn is_rtl(value: &str) -> bool {
+    match value {
+        "rtl" => true,
+        _ => false
+    }
+}
+
+#[inline]
 pub(crate) fn draw_text(
     canvas_native_ptr: c_longlong,
     text: *const c_char,
@@ -1237,28 +925,66 @@ pub(crate) fn draw_text(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let font = &mut canvas_native.font;
     let text_to_draw = unsafe { CStr::from_ptr(text as *mut _).to_str().unwrap_or("") };
 
     if !text_to_draw.is_empty() {
         let mut blur: Option<Paint> = None;
-        if canvas_native.shadow_color > 0
-            && (canvas_native.shadow_blur > 0.0
-            || canvas_native.shadow_offset_x > 0.0
-            || canvas_native.shadow_offset_y > 0.0)
+        if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
         {
             let mut paint = Paint::default();
             paint.set_color(Color::from(canvas_native.shadow_color));
-            paint.set_anti_alias(true);
-            let filter = MaskFilter::blur(BlurStyle::Normal, canvas_native.shadow_blur, None);
-            paint.set_mask_filter(filter);
+            paint.set_anti_alias(false);
+            if canvas_native.shadow_blur > 0.0 {
+                let filter = MaskFilter::blur(BlurStyle::Normal, canvas_native.shadow_blur, None);
+                paint.set_mask_filter(filter);
+            }
+
+            if is_stoke {
+                paint.set_style(Style::Stroke);
+            } else {
+                paint.set_style(Style::Fill);
+            }
+
+            let line_join = match canvas_native.line_join.as_ref() {
+                "round" => Join::Round,
+                "bevel" => Join::Bevel,
+                _ => Join::Miter
+            };
+
+            let line_cap = match canvas_native.line_cap.as_ref() {
+                "round" => Cap::Round,
+                "square" => Cap::Square,
+                _ => Cap::Butt
+            };
+
+
+            paint.set_stroke_miter(canvas_native.miter_limit);
+            paint.set_stroke_cap(line_cap);
+            paint.set_stroke_join(line_join);
+
             blur = Some(paint);
         }
 
+        let mut position = Point::new(x, y);
         let mut align = Align::Left;
         match canvas_native.text_align.as_ref() {
+            "start" => {
+                if is_rtl(canvas_native.direction.as_ref()) {
+                    align = Align::Right;
+                } else {
+                    align = Align::Left;
+                }
+            }
+            "end" => {
+                if is_rtl(canvas_native.direction.as_ref()) {
+                    align = Align::Left;
+                } else {
+                    align = Align::Right;
+                }
+            }
             "right" => {
                 align = Align::Right;
             }
@@ -1269,12 +995,35 @@ pub(crate) fn draw_text(
                 align = Align::Left;
             }
         }
+
+        let measurement = font.measure_str(text_to_draw, None);
+        let font_width = measurement.0;
+        let max_width = width;
+        let mut width = 0f32;
+        if max_width > 0.0 && max_width < font_width {
+            width = max_width
+        } else {
+            width = font_width;
+        }
+        match align {
+            Align::Right => {
+                position.x = position.x - width;
+            }
+            Align::Center => {
+                position.x = position.x - (width / 2.0);
+            }
+            _ => {
+                // NOOP
+            }
+        }
+
         if is_stoke {
+            let tmp_paint = canvas_native.stroke_paint.clone();
             &canvas.draw_str_align(
                 text_to_draw,
-                (x, y),
-                &canvas_native.font,
-                &canvas_native.stroke_paint,
+                (position.x, position.y),
+                font,
+                &tmp_paint,
                 align,
             );
             if blur.is_some() {
@@ -1283,6 +1032,7 @@ pub(crate) fn draw_text(
                 blur = Some(shadow);
             }
         } else {
+            let tmp_paint = canvas_native.fill_paint.clone();
             if blur.is_some() {
                 let mut fill_shadow = blur.unwrap();
                 fill_shadow.set_style(Style::Fill);
@@ -1290,15 +1040,15 @@ pub(crate) fn draw_text(
             }
             &canvas.draw_str_align(
                 text_to_draw,
-                (x, y),
-                &canvas_native.font,
-                &canvas_native.fill_paint,
+                (position.x, position.y),
+                font,
+                &tmp_paint,
                 align,
             );
         }
 
         if blur.is_some() {
-            let mut shadow = blur.unwrap();
+            let shadow = blur.unwrap();
             canvas.draw_str_align(
                 text_to_draw,
                 (
@@ -1310,8 +1060,6 @@ pub(crate) fn draw_text(
                 align,
             );
         }
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -1328,7 +1076,7 @@ pub(crate) fn move_to(
     }
     if is_canvas {
         let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(native_ptr as *mut _) };
-        &canvas_native.path.move_to(Point::new(x as f32, y as f32));
+        unsafe { &mut canvas_native.path.inner_mut().moveTo(x as f32, y as f32); }
         Box::into_raw(canvas_native) as *mut _ as i64
     } else {
         let mut path: Box<Path> = unsafe { Box::from_raw(native_ptr as *mut _) };
@@ -1493,8 +1241,8 @@ pub(crate) fn ellipse(
     return ellipse_no_rotation(
         new_canvas_native_ptr,
         is_canvas,
-        0.0,
-        0.0,
+        x,
+        y,
         radius_x,
         radius_y,
         start_angle,
@@ -1502,6 +1250,7 @@ pub(crate) fn ellipse(
     );
 }
 
+#[inline]
 pub(crate) fn set_line_width(canvas_native_ptr: c_longlong, line_width: c_float) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -1519,12 +1268,7 @@ pub(crate) fn begin_path(canvas_native_ptr: c_longlong) -> c_longlong {
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    if !canvas_native.path.is_empty() {
-        let mut path = Path::new();
-        canvas_native.path = path;
-        // canvas_native.path.reset();
-    }
-    //canvas_native.path.rewind();
+    canvas_native.path.rewind();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
@@ -1535,7 +1279,7 @@ pub(crate) fn stroke_path(canvas_native_ptr: c_longlong, path: c_longlong) -> c_
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let canvas = surface.canvas();
 
     let mut filter: Option<ImageFilter> = None;
@@ -1553,12 +1297,21 @@ pub(crate) fn stroke_path(canvas_native_ptr: c_longlong, path: c_longlong) -> c_
         );
         &canvas_native.stroke_paint.set_image_filter(filter);
     }
-    let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
+    let path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
     canvas.draw_path(&path, &canvas_native.stroke_paint);
-    // canvas.flush();
-    // canvas_native.surface.flush();
     Box::into_raw(path);
     Box::into_raw(canvas_native) as *mut _ as i64
+}
+
+fn is_path_expensive(path: &Path) -> bool {
+    if !path.is_convex() {
+        return true;
+    }
+    if path.count_points() > 50 {
+        return true;
+    }
+
+    return false;
 }
 
 #[inline]
@@ -1568,14 +1321,11 @@ pub(crate) fn stroke(canvas_native_ptr: c_longlong) -> c_longlong {
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let canvas = surface.canvas();
 
     let mut filter: Option<ImageFilter> = None;
-    if canvas_native.shadow_color > 0
-        && (canvas_native.shadow_blur > 0.0
-        || canvas_native.shadow_offset_x > 0.0
-        || canvas_native.shadow_offset_y > 0.0)
+    if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
     {
         filter = drop_shadow(
             Vector::new(canvas_native.shadow_offset_x, canvas_native.shadow_offset_y),
@@ -1586,24 +1336,25 @@ pub(crate) fn stroke(canvas_native_ptr: c_longlong) -> c_longlong {
         );
         &canvas_native.stroke_paint.set_image_filter(filter);
     }
-
     canvas.draw_path(&canvas_native.path, &canvas_native.stroke_paint);
-    // canvas.flush();
-    // canvas_native.surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
 #[inline]
-pub(crate) fn fill_path_rule(canvas_native_ptr: c_longlong, path: c_longlong, fill_rule: *const c_char) -> c_longlong {
+pub(crate) fn fill_path_rule(
+    canvas_native_ptr: c_longlong,
+    path: c_longlong,
+    fill_rule: *const c_char,
+) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
 
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    let mut fill_type: FillType;
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    let fill_type: FillType;
     let rule = unsafe {
         CStr::from_ptr(fill_rule as *mut _)
             .to_str()
@@ -1617,10 +1368,7 @@ pub(crate) fn fill_path_rule(canvas_native_ptr: c_longlong, path: c_longlong, fi
     let mut path: Box<Path> = unsafe { Box::from_raw(path as *mut _) };
     path.set_fill_type(fill_type);
     let mut filter: Option<ImageFilter> = None;
-    if canvas_native.shadow_color > 0
-        && (canvas_native.shadow_blur > 0.0
-        || canvas_native.shadow_offset_x > 0.0
-        || canvas_native.shadow_offset_y > 0.0)
+    if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
     {
         filter = drop_shadow(
             Vector::new(canvas_native.shadow_offset_x, canvas_native.shadow_offset_y),
@@ -1631,10 +1379,7 @@ pub(crate) fn fill_path_rule(canvas_native_ptr: c_longlong, path: c_longlong, fi
         );
         &canvas_native.fill_paint.set_image_filter(filter);
     }
-
     canvas.draw_path(&path, &canvas_native.fill_paint);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(path);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -1647,13 +1392,10 @@ pub(crate) fn fill(canvas_native_ptr: c_longlong) -> c_longlong {
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
 
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let mut filter: Option<ImageFilter> = None;
-    if canvas_native.shadow_color > 0
-        && (canvas_native.shadow_blur > 0.0
-        || canvas_native.shadow_offset_x > 0.0
-        || canvas_native.shadow_offset_y > 0.0)
+    if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
     {
         filter = drop_shadow(
             Vector::new(canvas_native.shadow_offset_x, canvas_native.shadow_offset_y),
@@ -1666,8 +1408,6 @@ pub(crate) fn fill(canvas_native_ptr: c_longlong) -> c_longlong {
     }
 
     canvas.draw_path(&canvas_native.path, &canvas_native.fill_paint);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
@@ -1679,8 +1419,8 @@ pub(crate) fn fill_rule(canvas_native_ptr: c_longlong, fill_rule: *const c_char)
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
 
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let mut fill_type: FillType;
     let rule = unsafe {
         CStr::from_ptr(fill_rule as *mut _)
@@ -1693,10 +1433,7 @@ pub(crate) fn fill_rule(canvas_native_ptr: c_longlong, fill_rule: *const c_char)
     };
     canvas_native.path.set_fill_type(fill_type);
     let mut filter: Option<ImageFilter> = None;
-    if canvas_native.shadow_color > 0
-        && (canvas_native.shadow_blur > 0.0
-        || canvas_native.shadow_offset_x > 0.0
-        || canvas_native.shadow_offset_y > 0.0)
+    if canvas_native.shadow_color > 0 && canvas_native.shadow_blur > 0.0
     {
         filter = drop_shadow(
             Vector::new(canvas_native.shadow_offset_x, canvas_native.shadow_offset_y),
@@ -1707,13 +1444,9 @@ pub(crate) fn fill_rule(canvas_native_ptr: c_longlong, fill_rule: *const c_char)
         );
         &canvas_native.fill_paint.set_image_filter(filter);
     }
-
     canvas.draw_path(&canvas_native.path, &canvas_native.fill_paint);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
-
 
 #[inline]
 pub(crate) fn close_path(native_ptr: c_longlong, is_canvas: bool) -> c_longlong {
@@ -1735,6 +1468,7 @@ pub(crate) fn close_path(native_ptr: c_longlong, is_canvas: bool) -> c_longlong 
     }
 }
 
+#[inline]
 pub(crate) fn rect(
     native_ptr: c_longlong,
     is_canvas: bool,
@@ -1759,6 +1493,7 @@ pub(crate) fn rect(
     }
 }
 
+#[inline]
 pub(crate) fn bezier_curve_to(
     native_ptr: c_longlong,
     is_canvas: bool,
@@ -1791,6 +1526,7 @@ pub(crate) fn bezier_curve_to(
     }
 }
 
+#[inline]
 pub(crate) fn line_to(
     native_ptr: c_longlong,
     is_canvas: bool,
@@ -1802,7 +1538,8 @@ pub(crate) fn line_to(
     }
     if is_canvas {
         let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(native_ptr as *mut _) };
-        &canvas_native.path.line_to(Point::new(x, y));
+        // canvas_native.path.line_to(Point::new(x, y));
+        unsafe { &mut canvas_native.path.inner_mut().lineTo(x, y); };
         Box::into_raw(canvas_native) as *mut _ as i64
     } else {
         let mut path: Box<Path> = unsafe { Box::from_raw(native_ptr as *mut _) };
@@ -1826,9 +1563,15 @@ pub(crate) fn arc_to(
     }
     if is_canvas {
         let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(native_ptr as *mut _) };
-        &canvas_native
-            .path
-            .arc_to_tangent(Point::new(x1, y1), Point::new(x2, y2), radius);
+        // &canvas_native
+        //     .path
+        //     .arc_to_tangent(Point::new(x1, y1), Point::new(x2, y2), radius);
+        unsafe {
+            &mut canvas_native
+                .path
+                .inner_mut()
+                .arcTo1(x1, y1, x2, y2, radius);
+        };
         Box::into_raw(canvas_native) as *mut _ as i64
     } else {
         let mut path: Box<Path> = unsafe { Box::from_raw(native_ptr as *mut _) };
@@ -1880,21 +1623,19 @@ pub(crate) fn set_fill_color_rgba(
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
-pub(crate) fn set_fill_color(
-    canvas_native_ptr: c_longlong,
-    color: u32,
-) -> c_longlong {
+#[inline]
+pub(crate) fn set_fill_color(canvas_native_ptr: c_longlong, color: u32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    canvas_native
-        .fill_paint
-        .set_color(Color::from(color));
+    canvas_native.fill_paint.set_color(color);
+    //canvas_native.fill_paint.set_color(Color::from(color));
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_gradient_radial(
     canvas_native_ptr: c_longlong,
     x0: c_float,
@@ -1904,7 +1645,7 @@ pub(crate) fn set_gradient_radial(
     y1: c_float,
     radius_1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
     is_stroke: bool,
@@ -1914,16 +1655,16 @@ pub(crate) fn set_gradient_radial(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let new_colors_array: &mut [i32] =
-        unsafe { std::slice::from_raw_parts_mut(colors_array as *mut _, colors_size) };
+    let new_colors_array =
+        unsafe { std::slice::from_raw_parts(colors_array, colors_size) };
     let mut new_color_vec: Vec<Color> = Vec::new();
     for (index, color) in new_colors_array.iter().enumerate() {
-        new_color_vec.push(Color::from(*color as u32))
+        new_color_vec.push(Color::from(*color))
     }
     let color_array = GradientShaderColors::Colors(new_color_vec.as_slice());
-    let new_positions_array: &mut [f32] =
-        unsafe { std::slice::from_raw_parts_mut(positions_array as *mut _, positions_size) };
-    let mut paint;
+    let new_positions_array =
+        unsafe { std::slice::from_raw_parts(positions_array, positions_size) };
+    let paint;
     if is_stroke {
         paint = &mut canvas_native.stroke_paint;
     } else {
@@ -1944,6 +1685,7 @@ pub(crate) fn set_gradient_radial(
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_gradient_linear(
     canvas_native_ptr: c_longlong,
     x0: c_float,
@@ -1951,7 +1693,7 @@ pub(crate) fn set_gradient_linear(
     x1: c_float,
     y1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
     is_stroke: bool,
@@ -1961,20 +1703,17 @@ pub(crate) fn set_gradient_linear(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let new_colors_array: &mut [i32] =
-        unsafe { std::slice::from_raw_parts_mut(colors_array as *mut _, colors_size) };
+    let new_colors_array =
+        unsafe { std::slice::from_raw_parts(colors_array, colors_size) };
     let mut new_color_vec: Vec<Color> = Vec::new();
     for (_index, color) in new_colors_array.iter().enumerate() {
-        new_color_vec.push(Color::from(*color as u32))
-    }
-    if new_colors_array.len() > 3 {
-        panic!()
+        new_color_vec.push(Color::from(*color))
     }
     let color_array = GradientShaderColors::Colors(new_color_vec.as_slice());
 
-    let new_positions_array: &mut [f32] =
-        unsafe { std::slice::from_raw_parts_mut(positions_array as *mut _, positions_size) };
-    let mut paint;
+    let new_positions_array =
+        unsafe { std::slice::from_raw_parts(positions_array, positions_size) };
+    let paint;
     if is_stroke {
         paint = &mut canvas_native.stroke_paint;
     } else {
@@ -2005,24 +1744,19 @@ pub(crate) fn set_stroke_color_rgba(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    &canvas_native
-        .stroke_paint
-        .set_argb(alpha, red, green, blue);
+    &canvas_native.stroke_paint.set_argb(alpha, red, green, blue);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
-pub(crate) fn set_stroke_color(
-    canvas_native_ptr: c_longlong,
-    color: u32,
-) -> c_longlong {
+#[inline]
+pub(crate) fn set_stroke_color(canvas_native_ptr: c_longlong, color: u32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    &canvas_native
-        .stroke_paint
-        .set_color(Color::from(color));
+    //&canvas_native.stroke_paint.set_color(Color::from(color));
+    canvas_native.stroke_paint.set_color(color);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
@@ -2041,15 +1775,13 @@ pub(crate) fn clear_rect(
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
     let rect = Rect::new(x, y, width + x, height + y);
     let mut paint = Paint::default();
-    paint.set_anti_alias(true);
+    paint.set_anti_alias(false);
     paint.set_style(Style::Fill);
     paint.set_blend_mode(BlendMode::Clear);
-    paint.set_color(Color::from(0xFF000000));
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    paint.set_color(0);
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.draw_rect(rect, &paint);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
@@ -2060,14 +1792,15 @@ pub(crate) fn clear_canvas(canvas_native_ptr: c_longlong) -> c_longlong {
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.clear(Color::from_argb(255, 255, 255, 255));
     //canvas.flush();
     //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_line_dash(
     canvas_native_ptr: c_longlong,
     size: size_t,
@@ -2078,7 +1811,7 @@ pub(crate) fn set_line_dash(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut stroke_paint = &mut canvas_native.stroke_paint;
+    let stroke_paint = &mut canvas_native.stroke_paint;
     if size == 0 {
         stroke_paint.set_path_effect(None);
     } else {
@@ -2092,6 +1825,7 @@ pub(crate) fn set_line_dash(
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_global_composite_operation(
     canvas_native_ptr: c_longlong,
     composite: *const c_char,
@@ -2105,12 +1839,13 @@ pub(crate) fn set_global_composite_operation(
     let new_operation = operation.to_str().unwrap_or("source-over");
     let global_composite_operation = CanvasCompositeOperationType::value_from_str(new_operation);
     let mut fill_paint = &mut canvas_native.fill_paint;
-    let mut stroke_paint = &mut canvas_native.stroke_paint;
+    let stroke_paint = &mut canvas_native.stroke_paint;
     fill_paint.set_blend_mode(global_composite_operation.get_blend_mode());
     stroke_paint.set_blend_mode(global_composite_operation.get_blend_mode());
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2118,15 +1853,15 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
 
-    let mut font_str = unsafe {
+    let font_str = unsafe {
         CStr::from_ptr(font as *mut _)
             .to_str()
             .unwrap_or("10px sans-serif")
     };
-    let mut font_array: Vec<_> = font_str.split(" ").collect();
+    let font_array: Vec<_> = font_str.split(" ").collect();
     let length = font_array.len();
     let mut font_native_style = FontStyle::default();
-    let mut font_native_weight = FontStyleWeight::NORMAL;
+    let mut font_native_weight = skia_safe::font_style::Weight::NORMAL;
     let mut font_native_size = 10.0 as f32;
     let mut font_native_type_face = Typeface::default();
     for (key, item) in font_array.iter().enumerate() {
@@ -2149,24 +1884,25 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
                     let i = *item;
                     match i {
                         "normal" => {
-                            font_native_weight = FontStyleWeight::NORMAL;
+                            font_native_weight = skia_safe::font_style::Weight::NORMAL;
                         }
                         "bold" => {
-                            font_native_weight = FontStyleWeight::BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::BOLD;
                         }
                         "bolder" => {
-                            font_native_weight = FontStyleWeight::EXTRA_BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::EXTRA_BOLD;
                         }
                         "lighter" => {
-                            font_native_weight = FontStyleWeight::LIGHT;
+                            font_native_weight = skia_safe::font_style::Weight::LIGHT;
                         }
                         _ => {
-                            font_native_weight =
-                                FontStyleWeight::from(i.parse::<i32>().unwrap_or(400));
+                            font_native_weight = skia_safe::font_style::Weight::from(
+                                i.parse::<i32>().unwrap_or(400),
+                            );
                         }
                     }
                 } else {
-                    font_native_weight = FontStyleWeight::NORMAL;
+                    font_native_weight = skia_safe::font_style::Weight::NORMAL;
                 }
             } else if key == 3 {
                 if is_font_size(item) {
@@ -2177,7 +1913,7 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
                 }
             } else if key == 4 {
                 font_native_type_face =
-                    Typeface::from_name(item, font_native_style).unwrap_or(Typeface::default());
+                    Typeface::from_name(item.replacen('"', "", 2), font_native_style).unwrap_or(Typeface::default());
             }
         } else if length == 4 {
             if key == 0 {} else if key == 1 {
@@ -2185,24 +1921,25 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
                     let i = *item;
                     match i {
                         "normal" => {
-                            font_native_weight = FontStyleWeight::NORMAL;
+                            font_native_weight = skia_safe::font_style::Weight::NORMAL;
                         }
                         "bold" => {
-                            font_native_weight = FontStyleWeight::BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::BOLD;
                         }
                         "bolder" => {
-                            font_native_weight = FontStyleWeight::EXTRA_BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::EXTRA_BOLD;
                         }
                         "lighter" => {
-                            font_native_weight = FontStyleWeight::LIGHT;
+                            font_native_weight = skia_safe::font_style::Weight::LIGHT;
                         }
                         _ => {
-                            font_native_weight =
-                                FontStyleWeight::from(i.parse::<i32>().unwrap_or(400));
+                            font_native_weight = skia_safe::font_style::Weight::from(
+                                i.parse::<i32>().unwrap_or(400),
+                            );
                         }
                     }
                 } else {
-                    font_native_weight = FontStyleWeight::NORMAL;
+                    font_native_weight = skia_safe::font_style::Weight::NORMAL;
                 }
             } else if key == 2 {
                 if is_font_size(item) {
@@ -2221,24 +1958,25 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
                     let i = *item;
                     match i {
                         "normal" => {
-                            font_native_weight = FontStyleWeight::NORMAL;
+                            font_native_weight = skia_safe::font_style::Weight::NORMAL;
                         }
                         "bold" => {
-                            font_native_weight = FontStyleWeight::BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::BOLD;
                         }
                         "bolder" => {
-                            font_native_weight = FontStyleWeight::EXTRA_BOLD;
+                            font_native_weight = skia_safe::font_style::Weight::EXTRA_BOLD;
                         }
                         "lighter" => {
-                            font_native_weight = FontStyleWeight::LIGHT;
+                            font_native_weight = skia_safe::font_style::Weight::LIGHT;
                         }
                         _ => {
-                            font_native_weight =
-                                FontStyleWeight::from(i.parse::<i32>().unwrap_or(400));
+                            font_native_weight = skia_safe::font_style::Weight::from(
+                                i.parse::<i32>().unwrap_or(400),
+                            );
                         }
                     }
                 } else {
-                    font_native_weight = FontStyleWeight::NORMAL;
+                    font_native_weight = skia_safe::font_style::Weight::NORMAL;
                 }
             } else if key == 1 {
                 if is_font_size(item) {
@@ -2271,24 +2009,24 @@ pub(crate) fn set_font(canvas_native_ptr: c_longlong, font: *const c_char) -> c_
                 Typeface::from_name("aria", font_native_style).unwrap_or(Typeface::default());
         }
     }
-    canvas_native.font = Font::from_typeface(&font_native_type_face, font_native_size);
+    canvas_native.font = Font::from_typeface(font_native_type_face, font_native_size);
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn scale(canvas_native_ptr: c_longlong, x: c_float, y: c_float) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.scale((x, y));
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn transform(
     canvas_native_ptr: c_longlong,
     a: c_float,
@@ -2303,16 +2041,15 @@ pub(crate) fn transform(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let affine = [a, b, c, d, e, f];
-    let mut matrix = Matrix::from_affine(&affine);
+    let matrix = Matrix::from_affine(&affine);
     canvas.set_matrix(&matrix);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_transform(
     canvas_native_ptr: c_longlong,
     a: c_float,
@@ -2327,42 +2064,38 @@ pub(crate) fn set_transform(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let affine = [a, b, c, d, e, f];
     let matrix = Matrix::from_affine(&affine);
-    canvas.reset_matrix();
+    // canvas.reset_matrix();
     canvas.set_matrix(&matrix);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn rotate(canvas_native_ptr: c_longlong, angle: c_float) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.rotate(angle * (180.0 / PI_FLOAT), None);
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn translate(canvas_native_ptr: c_longlong, x: c_float, y: c_float) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.translate(Vector::new(x, y));
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
@@ -2406,7 +2139,7 @@ pub(crate) fn draw_image(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let image_slice: &[u8] = unsafe { std::slice::from_raw_parts(image_array, image_size) };
     let data = Data::new_copy(image_slice);
     let info = ImageInfo::new(
@@ -2416,9 +2149,9 @@ pub(crate) fn draw_image(
         None,
     );
     let image_new = Image::from_raster_data(&info, data, (original_width * 4) as usize);
-    let mut canvas = surface.canvas();
+    let canvas = surface.canvas();
     let mut paint = Paint::default();
-    paint.set_anti_alias(true);
+    paint.set_anti_alias(false);
     paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
     if canvas_native.image_smoothing_enabled {
         match canvas_native.image_smoothing_quality.as_str() {
@@ -2439,8 +2172,6 @@ pub(crate) fn draw_image(
 
     if image_new.is_some() {
         canvas.draw_image(&image_new.unwrap(), Point::new(dx, dy), Some(&paint));
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -2462,8 +2193,8 @@ pub(crate) fn draw_image_dw(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let image_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(image_array as *mut _, image_size) };
     let data = Data::new_copy(image_slice);
@@ -2476,7 +2207,7 @@ pub(crate) fn draw_image_dw(
     let image_new = Image::from_raster_data(&info, data, (original_width * 4) as usize);
     if image_new.is_some() {
         let mut paint = Paint::default();
-        paint.set_anti_alias(true);
+        paint.set_anti_alias(false);
         paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
         if canvas_native.image_smoothing_enabled {
             match canvas_native.image_smoothing_quality.as_str() {
@@ -2501,8 +2232,6 @@ pub(crate) fn draw_image_dw(
             Rect::new(dx, dy, d_width + dx, d_height + dy),
             &paint,
         );
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -2528,8 +2257,8 @@ pub(crate) fn draw_image_sw(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let image_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(image_array as *mut _, image_size) };
 
@@ -2545,7 +2274,7 @@ pub(crate) fn draw_image_sw(
     if image_new.is_some() {
         let src_rect = Rect::new(sx, sy, s_width + sx, s_height + sy);
         let mut paint = Paint::default();
-        paint.set_anti_alias(true);
+        paint.set_anti_alias(false);
         paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
         if canvas_native.image_smoothing_enabled {
             match canvas_native.image_smoothing_quality.as_str() {
@@ -2570,19 +2299,18 @@ pub(crate) fn draw_image_sw(
             Rect::new(dx, dy, d_width + dx, d_height + dy),
             &paint,
         );
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
+
 
 #[inline]
 pub(crate) fn draw_image_encoded(
     canvas_native_ptr: c_longlong,
     image_array: *const u8,
     image_size: size_t,
-    original_width: c_int,
-    original_height: c_int,
+    _original_width: c_int,
+    _original_height: c_int,
     dx: c_float,
     dy: c_float,
 ) -> c_longlong {
@@ -2591,15 +2319,16 @@ pub(crate) fn draw_image_encoded(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
     let image_slice: &[u8] = unsafe { std::slice::from_raw_parts(image_array, image_size) };
     let data = Data::new_copy(image_slice);
     let image_new = Image::from_encoded(data, None);
-    let mut canvas = surface.canvas();
+    let canvas = surface.canvas();
     if image_new.is_some() {
-        canvas.draw_image(&image_new.unwrap(), Point::new(dx, dy), None);
-        //canvas.flush();
-        //surface.flush();
+        let mut paint = Paint::default();
+        paint.set_anti_alias(false);
+        paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
+        canvas.draw_image(&image_new.unwrap(), Point::new(dx, dy), Some(&paint));
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -2609,8 +2338,8 @@ pub(crate) fn draw_image_dw_encoded(
     canvas_native_ptr: c_longlong,
     image_array: *const u8,
     image_size: size_t,
-    original_width: c_int,
-    original_height: c_int,
+    _original_width: c_int,
+    _original_height: c_int,
     dx: c_float,
     dy: c_float,
     d_width: c_float,
@@ -2621,8 +2350,8 @@ pub(crate) fn draw_image_dw_encoded(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let image_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(image_array as *mut _, image_size) };
 
@@ -2631,15 +2360,15 @@ pub(crate) fn draw_image_dw_encoded(
 
     if image_new.is_some() {
         let mut paint = Paint::default();
-        paint.set_anti_alias(true);
+        paint.set_anti_alias(false);
+        paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
+        let tmp_paint = canvas_native.fill_paint.clone();
         canvas.draw_image_rect(
             &image_new.unwrap(),
             None,
             Rect::new(dx, dy, d_width + dx, d_height + dy),
-            &paint,
+            &tmp_paint,
         );
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
@@ -2649,8 +2378,8 @@ pub(crate) fn draw_image_sw_encoded(
     canvas_native_ptr: c_longlong,
     image_array: *const u8,
     image_size: size_t,
-    original_width: c_int,
-    original_height: c_int,
+    _original_width: c_int,
+    _original_height: c_int,
     sx: c_float,
     sy: c_float,
     s_width: c_float,
@@ -2665,8 +2394,8 @@ pub(crate) fn draw_image_sw_encoded(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let image_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(image_array as *mut _, image_size) };
 
@@ -2676,29 +2405,29 @@ pub(crate) fn draw_image_sw_encoded(
     if image_new.is_some() {
         let src_rect = Rect::new(sx, sy, s_width + sx, s_height + sy);
         let mut paint = Paint::default();
-        paint.set_anti_alias(true);
+        paint.set_anti_alias(false);
+        paint.set_blend_mode(canvas_native.fill_paint.blend_mode());
+        let tmp_paint = canvas_native.fill_paint.clone();
         canvas.draw_image_rect(
             &image_new.unwrap(),
             Some((&src_rect, SrcRectConstraint::Strict)),
             Rect::new(dx, dy, d_width + dx, d_height + dy),
-            &paint,
+            &tmp_paint,
         );
-        //canvas.flush();
-        //surface.flush();
     }
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn save(canvas_native_ptr: c_longlong) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    // surface.canvas().save();
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.save();
     let count = canvas.save_count();
     let size = &canvas_native.font.size().clone();
@@ -2717,6 +2446,12 @@ pub(crate) fn save(canvas_native_ptr: c_longlong) -> c_longlong {
         device_scale: canvas_native.device_scale,
         text_align: canvas_native.text_align.clone(),
         ios: canvas_native.ios.clone(),
+        global_composite_operation: canvas_native.global_composite_operation.clone(),
+        line_cap: canvas_native.line_cap.clone(),
+        line_join: canvas_native.line_join.clone(),
+        direction: canvas_native.direction.clone(),
+        miter_limit: canvas_native.miter_limit,
+        surface_kind: canvas_native.surface_kind.clone(),
     };
 
     let state = &mut canvas_native.state;
@@ -2728,19 +2463,20 @@ pub(crate) fn save(canvas_native_ptr: c_longlong) -> c_longlong {
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn restore(canvas_native_ptr: c_longlong) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    //canvas.restore();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    canvas.restore();
     let state_item = canvas_native.state.pop();
     if state_item.is_some() {
         let item = state_item.unwrap();
-        canvas.restore_to_count(item.count);
+        //canvas.restore_to_count(item.count);
         if item.state > 0 {
             let canvas_state: Box<CanvasState> = unsafe { Box::from_raw(item.state as *mut _) };
             canvas_native.restore_from_state_box(canvas_state);
@@ -2749,15 +2485,20 @@ pub(crate) fn restore(canvas_native_ptr: c_longlong) -> c_longlong {
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
-pub(crate) fn clip_path_rule(canvas_native_ptr: c_longlong, path: c_longlong, fill_rule: *const c_char) -> c_longlong {
+#[inline]
+pub(crate) fn clip_path_rule(
+    canvas_native_ptr: c_longlong,
+    path: c_longlong,
+    fill_rule: *const c_char,
+) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    let mut fill_type: FillType;
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    let fill_type: FillType;
     let rule = unsafe {
         CStr::from_ptr(fill_rule as *mut _)
             .to_str()
@@ -2773,15 +2514,16 @@ pub(crate) fn clip_path_rule(canvas_native_ptr: c_longlong, path: c_longlong, fi
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn clip_rule(canvas_native_ptr: c_longlong, fill_rule: *const c_char) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    let mut fill_type: FillType;
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    let fill_type: FillType;
     let rule = unsafe {
         CStr::from_ptr(fill_rule as *mut _)
             .to_str()
@@ -2796,6 +2538,7 @@ pub(crate) fn clip_rule(canvas_native_ptr: c_longlong, fill_rule: *const c_char)
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn clip(canvas_native_ptr: c_longlong) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2804,6 +2547,7 @@ pub(crate) fn clip(canvas_native_ptr: c_longlong) -> c_longlong {
     clip_rule(canvas_native_ptr, zero.as_ptr())
 }
 
+#[inline]
 pub(crate) fn set_line_cap(canvas_native_ptr: c_longlong, line_cap: *const c_char) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2816,17 +2560,21 @@ pub(crate) fn set_line_cap(canvas_native_ptr: c_longlong, line_cap: *const c_cha
     match cap {
         "round" => {
             canvas_native.stroke_paint.set_stroke_cap(Cap::Round);
+            canvas_native.line_cap = "round".to_string();
         }
         "square" => {
             canvas_native.stroke_paint.set_stroke_cap(Cap::Square);
+            canvas_native.line_cap = "square".to_string();
         }
         _ => {
             canvas_native.stroke_paint.set_stroke_cap(Cap::Butt);
+            canvas_native.line_cap = "butt".to_string();
         }
     };
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_line_join(canvas_native_ptr: c_longlong, line_cap: *const c_char) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2839,17 +2587,21 @@ pub(crate) fn set_line_join(canvas_native_ptr: c_longlong, line_cap: *const c_ch
     match cap {
         "round" => {
             canvas_native.stroke_paint.set_stroke_join(Join::Round);
+            canvas_native.line_join = "round".to_string();
         }
         "bevel" => {
             canvas_native.stroke_paint.set_stroke_join(Join::Bevel);
+            canvas_native.line_join = "bevel".to_string();
         }
         _ => {
             canvas_native.stroke_paint.set_stroke_join(Join::Miter);
+            canvas_native.line_join = "miter".to_string();
         }
     };
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_global_alpha(canvas_native_ptr: c_longlong, alpha: u8) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2861,6 +2613,7 @@ pub(crate) fn set_global_alpha(canvas_native_ptr: c_longlong, alpha: u8) -> c_lo
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_miter_limit(canvas_native_ptr: c_longlong, limit: f32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2868,9 +2621,11 @@ pub(crate) fn set_miter_limit(canvas_native_ptr: c_longlong, limit: f32) -> c_lo
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
     canvas_native.stroke_paint.set_stroke_miter(limit);
+    canvas_native.miter_limit = limit;
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_line_dash_offset(canvas_native_ptr: c_longlong, offset: f32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2881,6 +2636,7 @@ pub(crate) fn set_line_dash_offset(canvas_native_ptr: c_longlong, offset: f32) -
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_shadow_blur(canvas_native_ptr: c_longlong, limit: f32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2891,6 +2647,7 @@ pub(crate) fn set_shadow_blur(canvas_native_ptr: c_longlong, limit: f32) -> c_lo
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_shadow_color(canvas_native_ptr: c_longlong, color: u32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2901,6 +2658,7 @@ pub(crate) fn set_shadow_color(canvas_native_ptr: c_longlong, color: u32) -> c_l
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_shadow_offset_x(canvas_native_ptr: c_longlong, x: f32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2911,6 +2669,7 @@ pub(crate) fn set_shadow_offset_x(canvas_native_ptr: c_longlong, x: f32) -> c_lo
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_shadow_offset_y(canvas_native_ptr: c_longlong, y: f32) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
@@ -2921,6 +2680,7 @@ pub(crate) fn set_shadow_offset_y(canvas_native_ptr: c_longlong, y: f32) -> c_lo
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn get_measure_text(
     canvas_native_ptr: c_longlong,
     text: *const c_char,
@@ -2931,8 +2691,7 @@ pub(crate) fn get_measure_text(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
     let string = unsafe { CStr::from_ptr(text as *const _).to_str().unwrap_or("") };
     let measurement = canvas_native.font.measure_str(string, None);
     metrics.width = measurement.0;
@@ -2940,11 +2699,13 @@ pub(crate) fn get_measure_text(
     metrics
 }
 
+#[inline]
 pub(crate) fn create_image_data(width: c_int, height: c_int) -> Vec<u8> {
     let size = (width * height) * 4;
     vec![0u8; size as usize]
 }
 
+#[inline]
 pub(crate) fn put_image_data(
     canvas_native_ptr: c_longlong,
     data: *const u8,
@@ -2963,10 +2724,10 @@ pub(crate) fn put_image_data(
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    let mut array = unsafe { std::slice::from_raw_parts(data, data_size) };
-    let mut data = Data::new_copy(array);
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    let array = unsafe { std::slice::from_raw_parts(data, data_size) };
+    let data = Data::new_copy(array);
     // is surface is opaque use AlphaType::Opaque
     let mut w = width;
     let mut h = height;
@@ -2976,27 +2737,25 @@ pub(crate) fn put_image_data(
     if dirty_height > -1 {
         h = dirty_height
     }
-    let mut info = ImageInfo::new(
+    let info = ImageInfo::new(
         ISize::new(width, height),
         ColorType::RGBA8888,
         AlphaType::Premul,
         None,
     );
     let row_bytes = (width * 4) as usize;
-    let mut image = Image::from_raster_data(&info, data, row_bytes);
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
-    canvas.write_pixels(
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
+    let _did_write = canvas.write_pixels(
         &info,
         &array,
         row_bytes,
-        IPoint::new(((x + dirty_x) as i32), ((y + dirty_y) as i32)),
+        IPoint::new((x + dirty_x) as i32, (y + dirty_y) as i32),
     );
-    //canvas.flush();
-    //surface.flush();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn get_image_data(
     canvas_native_ptr: c_longlong,
     sx: c_float,
@@ -3004,14 +2763,14 @@ pub(crate) fn get_image_data(
     sw: size_t,
     sh: size_t,
 ) -> (c_longlong, Vec<u8>) {
-    let mut pixels = Vec::new();
+    let pixels = Vec::new();
     if canvas_native_ptr == 0 {
         return (0, pixels);
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     let mut info = ImageInfo::new_n32_premul(ISize::new(sw as i32, sh as i32), None);
     let row_bytes = info.width() * 4;
     let mut slice = vec![255u8; (row_bytes * info.height()) as usize];
@@ -3025,10 +2784,12 @@ pub(crate) fn get_image_data(
     (ptr, slice)
 }
 
+#[inline]
 pub(crate) fn free_image_data(data: *const u8) {
     Box::from(data);
 }
 
+#[inline]
 pub(crate) fn set_image_smoothing_enabled(
     canvas_native_ptr: c_longlong,
     enabled: bool,
@@ -3038,6 +2799,7 @@ pub(crate) fn set_image_smoothing_enabled(
     }
     update_quality(enabled, canvas_native_ptr)
 }
+
 
 fn update_quality(enabled: bool, canvas_native_ptr: c_longlong) -> c_longlong {
     if canvas_native_ptr == 0 {
@@ -3070,6 +2832,7 @@ fn update_quality(enabled: bool, canvas_native_ptr: c_longlong) -> c_longlong {
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn set_image_smoothing_quality(
     canvas_native_ptr: c_longlong,
     quality: *const c_char,
@@ -3091,6 +2854,7 @@ pub(crate) fn set_image_smoothing_quality(
     update_quality(enabled, ptr)
 }
 
+#[inline]
 pub(crate) fn set_text_align(
     canvas_native_ptr: c_longlong,
     alignment: *const c_char,
@@ -3109,18 +2873,20 @@ pub(crate) fn set_text_align(
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn reset_transform(canvas_native_ptr: c_longlong) -> c_longlong {
     if canvas_native_ptr == 0 {
         return 0;
     }
     let mut canvas_native: Box<CanvasNative> =
         unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut surface = &mut canvas_native.surface;
-    let mut canvas = surface.canvas();
+    let surface = &mut canvas_native.surface;
+    let canvas = surface.canvas();
     canvas.reset_matrix();
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
+#[inline]
 pub(crate) fn add_path_to_path(
     path_native_ptr: c_longlong,
     path_to_add_native_ptr: c_longlong,
@@ -3136,6 +2902,7 @@ pub(crate) fn add_path_to_path(
     path_native_ptr
 }
 
+#[inline]
 pub(crate) fn add_path_to_path_with_matrix(
     path_native_ptr: c_longlong,
     path_to_add_native_ptr: c_longlong,
@@ -3156,329 +2923,4 @@ pub(crate) fn add_path_to_path_with_matrix(
         return Box::into_raw(path) as *mut _ as i64;
     }
     path_native_ptr
-}
-
-pub(crate) fn draw_svg_image(svg_canvas_native_ptr: c_longlong, svg: *const c_char) -> c_longlong {
-    if svg_canvas_native_ptr == 0 {
-        return 0;
-    }
-    let mut svg_canvas_native: Box<SVGCanvasNative> =
-        unsafe { Box::from_raw(svg_canvas_native_ptr as *mut _) };
-    let svg_surface = &mut svg_canvas_native.surface;
-    let canvas = svg_surface.canvas();
-    let mut rect = Rect::new_empty();
-    let mut svg_canvas = Canvas::new(rect.clone(), None);
-    if !svg.is_null() {
-        let svg_string = unsafe { CStr::from_ptr(svg as _) };
-        let string = svg_string.to_str().unwrap_or("");
-        if !string.is_empty() {
-            let mut reader = Reader::from_str(string);
-            let mut buf = Vec::new();
-            loop {
-                match reader.read_event(&mut buf) {
-                    Ok(Event::Start(ref e)) => match e.name() {
-                        b"svg" => {
-                            let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
-                            for attribute in attributes.iter() {
-                                let key = String::from_utf8_lossy(attribute.key).to_string();
-                                let val = attribute.unescape_and_decode_value(&reader).unwrap();
-                                match key.as_str() {
-                                    "width" => {
-                                        &rect.set_wh(val.parse::<f32>().unwrap(), rect.height());
-                                    }
-                                    "height" => {
-                                        &rect.set_wh(rect.width(), val.parse::<f32>().unwrap());
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            svg_canvas = Canvas::new(rect.clone(), None);
-                        }
-                        b"circle" => {
-                            let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
-                            let mut path = Path::new();
-                            let mut fill_paint = Paint::default();
-                            fill_paint.set_anti_alias(true);
-                            fill_paint.set_style(Style::Fill);
-                            let mut stroke_paint = Paint::default();
-                            stroke_paint.set_anti_alias(true);
-                            stroke_paint.set_style(Style::Stroke);
-                            let mut point = Point::new(0.0, 0.0);
-                            let mut radius = 0f32;
-                            for attribute in attributes.iter() {
-                                let key = String::from_utf8_lossy(attribute.key).to_string();
-                                let val = attribute.unescape_and_decode_value(&reader).unwrap();
-                                match key.as_str() {
-                                    "cx" => {
-                                        point.x = val.parse::<f32>().unwrap();
-                                    }
-                                    "cy" => {
-                                        point.y = val.parse::<f32>().unwrap();
-                                    }
-                                    "r" => {
-                                        radius = val.parse::<f32>().unwrap();
-                                    }
-                                    "stroke" => {
-                                        &stroke_paint
-                                            .set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    "stroke-width" => {
-                                        &stroke_paint.set_stroke_width(val.parse::<f32>().unwrap());
-                                    }
-                                    "fill" => {
-                                        &fill_paint.set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            path.add_circle(point, radius, None);
-                            &svg_canvas.draw_path(&path, &fill_paint);
-                            &svg_canvas.draw_path(&path, &stroke_paint);
-                        }
-                        b"text" => {}
-                        _ => {}
-                    },
-                    Ok(Event::Empty(ref e)) => match e.name() {
-                        b"circle" => {
-                            let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
-                            let mut path = Path::new();
-                            let mut fill_paint = Paint::default();
-                            fill_paint.set_anti_alias(true);
-                            fill_paint.set_anti_alias(true);
-                            fill_paint.set_style(Style::Fill);
-                            let mut stroke_paint = Paint::default();
-                            stroke_paint.set_anti_alias(true);
-                            stroke_paint.set_style(Style::Stroke);
-                            let mut point = Point::new(0.0, 0.0);
-                            let mut radius = 0f32;
-                            for attribute in attributes.iter() {
-                                let key = String::from_utf8_lossy(attribute.key).to_string();
-                                let val = attribute.unescape_and_decode_value(&reader).unwrap();
-                                match key.as_str() {
-                                    "cx" => {
-                                        point.x = val.parse::<f32>().unwrap();
-                                    }
-                                    "cy" => {
-                                        point.y = val.parse::<f32>().unwrap();
-                                    }
-                                    "r" => {
-                                        radius = val.parse::<f32>().unwrap();
-                                    }
-                                    "stroke" => {
-                                        &stroke_paint
-                                            .set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    "stroke-width" => {
-                                        &stroke_paint.set_stroke_width(val.parse::<f32>().unwrap());
-                                    }
-                                    "fill" => {
-                                        &fill_paint.set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            path.add_circle(point, radius, None);
-                            &canvas.draw_path(&path, &fill_paint);
-                            &canvas.draw_path(&path, &stroke_paint);
-                        }
-                        b"rect" => {
-                            let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
-                            let mut path = Path::new();
-                            let mut fill_paint = Paint::default();
-                            fill_paint.set_anti_alias(true);
-                            fill_paint.set_style(Style::Fill);
-                            let mut stroke_paint = Paint::default();
-                            stroke_paint.set_anti_alias(true);
-                            stroke_paint.set_style(Style::Stroke);
-                            let mut rect = Rect::new_empty();
-                            for attribute in attributes.iter() {
-                                let key = String::from_utf8_lossy(attribute.key).to_string();
-                                let val = attribute.unescape_and_decode_value(&reader).unwrap();
-                                match key.as_str() {
-                                    "width" => {
-                                        rect.right = val.parse::<f32>().unwrap();
-                                    }
-                                    "height" => {
-                                        rect.bottom = val.parse::<f32>().unwrap();
-                                    }
-                                    "style" => {
-                                        let mut styles = StyleParser::from_str(val.as_ref());
-                                        for style in styles.iter() {
-                                            match style.0 {
-                                                "width" => {
-                                                    rect.right = style.1.parse::<f32>().unwrap();
-                                                }
-                                                "height" => {
-                                                    rect.bottom = style.1.parse::<f32>().unwrap();
-                                                }
-                                                "stroke" => {
-                                                    &stroke_paint
-                                                        .set_color(ColorParser::from_str(style.1));
-                                                }
-                                                "stroke-width" => {
-                                                    &stroke_paint.set_stroke_width(
-                                                        style.1.parse::<f32>().unwrap(),
-                                                    );
-                                                }
-                                                "fill" => {
-                                                    &fill_paint
-                                                        .set_color(ColorParser::from_str(style.1));
-                                                }
-                                                "stroke-opacity" => {
-                                                    &stroke_paint.set_alpha(
-                                                        (style.1.parse::<f32>().unwrap_or(1.0)
-                                                            * 255.0)
-                                                            as u8,
-                                                    );
-                                                }
-                                                "fill-opacity" => {
-                                                    &fill_paint.set_alpha(
-                                                        (style.1.parse::<f32>().unwrap_or(1.0)
-                                                            * 255.0)
-                                                            as u8,
-                                                    );
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                    "stroke" => {
-                                        &stroke_paint
-                                            .set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    "stroke-width" => {
-                                        &stroke_paint.set_stroke_width(val.parse::<f32>().unwrap());
-                                    }
-                                    "fill" => {
-                                        &fill_paint.set_color(ColorParser::from_str(val.as_str()));
-                                    }
-                                    "stroke-opacity" => {
-                                        &stroke_paint.set_alpha(val.parse::<u8>().unwrap_or(255));
-                                    }
-                                    "fill-opacity" => {
-                                        &fill_paint.set_alpha(val.parse::<u8>().unwrap_or(255));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            path.add_rect(rect, None);
-                            &canvas.draw_path(&path, &fill_paint);
-                            &canvas.draw_path(&path, &stroke_paint);
-                        }
-                        b"path" => {
-                            let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
-                            let mut path = Path::new();
-                            let mut fill_paint = Paint::default();
-                            fill_paint.set_anti_alias(true);
-                            fill_paint.set_style(Style::Fill);
-                            let mut stroke_paint = Paint::default();
-                            stroke_paint.set_anti_alias(true);
-                            stroke_paint.set_style(Style::Stroke);
-                            let mut fill = false;
-                            let mut stroke = false;
-                            for attribute in attributes.iter() {
-                                let key = String::from_utf8_lossy(attribute.key).to_string();
-                                let val = attribute.unescape_and_decode_value(&reader).unwrap();
-                                match key.as_str() {
-                                    "d" => path = from_svg(val.as_str()).unwrap_or(Path::new()),
-                                    "stroke" => {
-                                        let value = val.as_str();
-                                        stroke = !value.eq("none");
-                                        &stroke_paint.set_color(ColorParser::from_str(value));
-                                    }
-                                    "stroke-width" => {
-                                        &stroke_paint.set_stroke_width(val.parse::<f32>().unwrap());
-                                    }
-                                    "fill" => {
-                                        let value = val.as_str();
-                                        fill = !value.eq("none");
-                                        &fill_paint.set_color(ColorParser::from_str(value));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            if fill {
-                                &canvas.draw_path(&path, &fill_paint);
-                            }
-
-                            if stroke {
-                                &canvas.draw_path(&path, &stroke_paint);
-                            }
-                        }
-                        _ => {}
-                    },
-                    Ok(Event::Text(e)) => {
-                        /* let font_native_type_face = Typeface::from_name("sans-serif", font_native_style).unwrap_or(Typeface::default());
-                        let font = Font::from_typeface(&font_native_type_face, 10.0);
-                        let blob = TextBlob::from_str(e.unescape_and_decode(&reader).unwrap(), &font);
-                        let mut paint = Paint::default();
-                        let mut point = Point::new(0.0, 0.0);
-                        &canvas.draw_text_blob(&blob.unwrap(), &point, &paint);*/
-                    }
-                    Ok(Event::End(ref e)) => {}
-                    Ok(Event::Eof) => break,
-                    Err(e) => panic!("Error at position {}: {:?}", reader.buffer_position(), e),
-                    _ => (), //
-                }
-                buf.clear();
-            }
-        }
-
-        canvas.flush();
-    }
-    Box::into_raw(svg_canvas_native) as *mut _ as i64
-}
-
-pub(crate) struct StyleParser {}
-
-impl StyleParser {
-    pub fn from_str(style: &str) -> Vec<(&str, &str)> {
-        let mut values: Vec<(_, _)> = Vec::new();
-        let mut styles: Vec<&str> = style.split(";").collect();
-        for style in styles.iter() {
-            let value = *style;
-            let key_value: Vec<_> = value.split(":").collect();
-            let default = "";
-            let k = key_value.get(0).unwrap_or(&default).to_owned();
-            let v = key_value.get(1).unwrap_or(&default).to_owned();
-            values.push((k, v));
-        }
-        values
-    }
-}
-
-pub(crate) struct ColorParser {}
-
-impl ColorParser {
-    pub fn is_color(value: &str) -> bool {
-        value.starts_with("#") || value.starts_with("rgb") || value.starts_with("hsl")
-    }
-    pub fn from_str(color: &str) -> Color {
-        let mut value = color.to_lowercase();
-        if value.starts_with("#") {
-            Color::BLACK
-        } else if value.starts_with("rgb") {
-            value = value.replace("rgba(", "");
-            value = value.replace("rgb(", "");
-            value = value.replace(")", "");
-            let mut rgb_rgba: Vec<_> = value.split(",").collect();
-            let default = "255";
-            let mut r = rgb_rgba.get(0).unwrap_or(&default).parse().unwrap_or(255);
-            let mut g = rgb_rgba.get(1).unwrap_or(&default).parse().unwrap_or(255);
-            let mut b = rgb_rgba.get(2).unwrap_or(&default).parse().unwrap_or(255);
-            let mut a = rgb_rgba.get(3).unwrap_or(&default).parse().unwrap_or(255);
-
-            Color::from_argb(a, r, g, b)
-        } else if value.starts_with("hsl") {
-            Color::BLACK
-        } else {
-            match value.as_str() {
-                "red" => Color::RED,
-                "blue" => Color::BLUE,
-                "green" => Color::GREEN,
-                "pink" => Color::from_rgb(255, 192, 203),
-                _ => Color::BLACK,
-            }
-        }
-    }
 }

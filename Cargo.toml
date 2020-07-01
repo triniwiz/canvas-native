@@ -1,18 +1,19 @@
 [package]
 name = "canvas-native"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Osei Fortune <fortune.osei@yahoo.com>"]
 edition = "2018"
 build="build.rs"
 
 [build-dependencies]
-bindgen = "0.53.2"
-cmake = "0.1.42"
+bindgen = "0.54.0"
+cmake = "0.1.44"
+cc = "1.0.56"
 
 [dependencies]
-libc = "0.2.67"
-quick-xml = "0.15.0"
-base64 = "0.12.0"
+libc = "0.2.71"
+quick-xml = "0.18.1"
+base64 = "0.12.1"
 image = "0.23.4"
 encoding_rs = "0.8.23"
 
@@ -21,12 +22,12 @@ log = "0.4.8"
 jni = { version = "0.16.0", default-features = false }
 android_logger = "0.8.6"
 jni-sys  = "0.3.0"
-skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "1f7a764" , features = ["gl"]}
-skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "1f7a764",  features = ["gl"]}
+skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "0308b9" , features = ["gl"]}
+skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "0308b9",  features = ["gl"]}
 
 [target.'cfg(target_os="ios")'.dependencies]
-skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "1f7a764" , features = ["metal","gl"]}
-skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "1f7a764", features = ["metal","gl"]}
+skia-bindings = {git="https://github.com/rust-skia/rust-skia.git", rev = "0308b9" , features = ["metal","gl"]}
+skia-safe = {git="https://github.com/rust-skia/rust-skia.git", rev = "0308b9", features = ["metal","gl"]}
 cocoa = { version = "0.20"}
 objc = { version = "0.2.4"}
 

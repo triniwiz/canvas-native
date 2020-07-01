@@ -1,27 +1,20 @@
 extern crate libc;
 
 use std::ffi::{c_void, CStr, CString};
-use std::mem;
 use std::os::raw::{c_char, c_uchar, c_uint};
 use std::ptr::{null, null_mut};
 
 use cocoa::foundation::NSAutoreleasePool;
 use libc::{c_float, c_int, c_longlong, size_t};
-use skia_safe::{gpu, IPoint};
 use skia_safe::{
-    AlphaType, Bitmap, BlendMode, Budgeted, ClipOp, Color, ColorSpace, ColorType, Data,
-    EncodedImageFormat, Font, FontStyle, FontStyleWeight, Image, ImageInfo, IRect, ISize,
-    Matrix, Paint, Path, PathEffect, PixelGeometry, PixelRef, Pixmap, Point, Rect, Shader, Size,
-    SrcRectConstraint, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, TileMode, Typeface,
-    Vector,
+    Color, ColorType, Font, FontStyle, Paint, Path, PixelGeometry, Point, Surface, SurfaceProps,
+    SurfacePropsFlags, Typeface,
 };
-use skia_safe::gpu::{BackendRenderTarget, Context, ResourceCacheLimits};
-use skia_safe::gpu::gl::Interface;
-use skia_safe::gpu::mtl::TextureInfo;
-use skia_safe::gradient_shader::GradientShaderColors;
+use skia_safe::gpu;
+use skia_safe::gpu::{BackendRenderTarget, Context};
 use skia_safe::paint::{Cap, Join, Style};
 
-use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasArray, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, COLOR_BLACK, create_image_data, create_matrix, create_path_2d, create_path_2d_from_path_data, create_path_from_path, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, fill_path_rule, fill_rule, flush, free_path_2d, free_text_decoder, free_text_encoder, get_current_transform, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_x_in_place_owned, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_weight, is_point_in_path, line_to, move_to, NativeByteArray, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_fill_color, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_text_align, set_transform, stroke, stroke_path, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_data_url, transform, translate, is_point_in_stroke};
+use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasArray, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, CanvasTextMetrics, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, COLOR_BLACK, COLOR_TRANSPARENT, create_image_data, create_matrix, create_path_2d, create_path_2d_from_path_data, create_path_from_path, create_pattern, create_pattern_encoded, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, fill, fill_path_rule, fill_rule, flush, free_byte_array, free_char, free_path_2d, free_pattern, free_text_decoder, free_text_encoder, get_current_transform, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_x_in_place_owned, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_weight, is_point_in_path, is_point_in_stroke, line_to, move_to, NativeByteArray, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_fill_color, set_fill_color_rgba, set_fill_pattern, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_pattern_transform, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_stroke_pattern, set_text_align, set_transform, snapshot_canvas, stroke, stroke_path, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_data_url, transform, translate, SurfaceKind};
 
 struct AutoreleasePool(*mut objc::runtime::Object);
 
@@ -42,131 +35,14 @@ impl Drop for AutoreleasePool {
 }
 
 #[no_mangle]
+pub extern "C" fn native_free_char(text: *const c_char) {
+    free_char(text)
+}
+
+
+#[no_mangle]
 pub extern "C" fn native_free_byte_array(array: NativeByteArray) {
-    native_free_byte_array(array)
-}
-
-#[no_mangle]
-pub extern "C" fn native_create_text_encoder(encoding: *const c_char) -> c_longlong {
-    Box::into_raw(Box::new(TextEncoder::new(encoding))) as i64
-}
-
-#[no_mangle]
-pub extern "C" fn native_text_encoder_get_encoding(encoder: i64) -> *const c_char {
-    text_encoder_get_encoding(encoder)
-}
-
-#[no_mangle]
-pub extern "C" fn native_text_encoder_encode(encoder: i64, text: *const c_char) -> NativeByteArray {
-    text_encoder_encode(encoder, text)
-}
-
-#[no_mangle]
-pub extern "C" fn native_text_encoder_free(encoder: i64) {
-    free_text_encoder(encoder);
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_create_text_decoder(decoding: *const c_char) -> c_longlong {
-    Box::into_raw(Box::new(TextDecoder::new(decoding))) as i64
-}
-
-#[no_mangle]
-pub extern "C" fn native_text_decoder_get_encoding(decoder: i64) -> *const c_char {
-    text_decoder_get_encoding(decoder)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_text_decoder_decode(decoder: i64, data: *const u8, len: size_t) -> *const c_char {
-    text_decoder_decode(decoder, data, len)
-}
-
-#[no_mangle]
-pub extern "C" fn native_text_decoder_free(decoder: i64) {
-    free_text_decoder(decoder);
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_flip_y_in_place_owned(width: u32, height: u32, buf: *mut u8, length: usize) {
-    image_asset_flip_y_in_place_owned(width, height, buf, length);
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_flip_x_in_place_owned(width: u32, height: u32, buf: *mut u8, length: usize) {
-    image_asset_flip_x_in_place_owned(width, height, buf, length)
-}
-
-#[no_mangle]
-pub extern "C" fn native_create_image_asset() -> c_longlong {
-    Box::into_raw(Box::new(NativeImageAsset::new())) as *mut _ as i64
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_load_from_path(asset: c_longlong, path: *const c_char) -> c_uint {
-    image_asset_load_from_path(asset, path)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_load_from_raw(asset: c_longlong, array: *const u8, size: size_t) -> c_uint {
-    image_asset_load_from_raw(asset, array, size)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_get_bytes(asset: c_longlong) -> NativeByteArray {
-    image_asset_get_bytes(asset)
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_free_bytes(data: NativeByteArray) {
-    image_asset_free_bytes(data)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_get_width(asset: c_longlong) -> c_uint {
-    image_asset_width(asset)
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_get_height(asset: c_longlong) -> c_uint {
-    image_asset_height(asset)
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_scale(asset: c_longlong, x: c_uint, y: c_uint) -> c_longlong {
-    image_asset_scale(asset, x, y)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_flip_x(asset: c_longlong) -> c_longlong {
-    image_asset_flip_x(asset)
-}
-
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_flip_y(asset: c_longlong) -> c_longlong {
-    image_asset_flip_y(asset)
-}
-
-#[no_mangle]
-pub extern "C" fn native_native_image_asset_save_path(asset: c_longlong, path: *const c_char, format: c_uint) -> c_uint {
-    image_asset_save_path(asset, path, format)
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_get_error(asset: c_longlong) -> *const c_char {
-    image_asset_get_error(asset)
-}
-
-#[no_mangle]
-pub extern "C" fn native_image_asset_release(asset: c_longlong) {
-    image_asset_release(asset)
+    free_byte_array(array)
 }
 
 
@@ -178,7 +54,6 @@ pub extern "C" fn native_destroy(canvas_ptr: c_longlong) {
     ctx.abandon();
 }
 
-
 #[no_mangle]
 pub extern "C" fn native_flush(canvas_ptr: c_longlong) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
@@ -186,7 +61,11 @@ pub extern "C" fn native_flush(canvas_ptr: c_longlong) -> c_longlong {
 }
 
 #[no_mangle]
-pub extern "C" fn native_to_data_url(canvas_ptr: c_longlong, format: *const c_char, quality: f32) -> *mut c_char {
+pub extern "C" fn native_to_data_url(
+    canvas_ptr: c_longlong,
+    format: *const c_char,
+    quality: f32,
+) -> *mut c_char {
     let _auto_release_pool = AutoreleasePool::new();
     to_data_url(canvas_ptr, format, ((quality * 100 as f32) as i32))
 }
@@ -197,13 +76,15 @@ pub extern "C" fn native_create_matrix() -> c_longlong {
     create_matrix()
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_set_matrix(matrix: c_longlong, array: *const c_void, length: size_t) -> c_longlong {
+pub extern "C" fn native_set_matrix(
+    matrix: c_longlong,
+    array: *const c_void,
+    length: size_t,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     set_matrix(matrix, array, length)
 }
-
 
 #[no_mangle]
 pub extern "C" fn native_get_matrix(matrix: c_longlong) -> CanvasArray {
@@ -217,7 +98,6 @@ pub extern "C" fn native_get_matrix(matrix: c_longlong) -> CanvasArray {
         length: size,
     }
 }
-
 
 #[no_mangle]
 pub extern "C" fn native_free_matrix_data(data: CanvasArray) {
@@ -254,7 +134,11 @@ pub extern "C" fn native_free_path_2d(path: c_longlong) {
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_add_path(path: c_longlong, path_to_add: c_longlong, matrix: c_longlong) -> c_longlong {
+pub extern "C" fn native_path_2d_add_path(
+    path: c_longlong,
+    path_to_add: c_longlong,
+    matrix: c_longlong,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     add_path_to_path_with_matrix(path, path_to_add, matrix)
 }
@@ -266,79 +150,114 @@ pub extern "C" fn native_path_2d_close_path(path: c_longlong) -> c_longlong {
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_move_to(path: c_longlong, x: c_float,
-                                         y: c_float, ) -> c_longlong {
+pub extern "C" fn native_path_2d_move_to(path: c_longlong, x: c_float, y: c_float) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     move_to(path, false, x, y)
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_line_to(path: c_longlong, x: c_float,
-                                         y: c_float, ) -> c_longlong {
+pub extern "C" fn native_path_2d_line_to(path: c_longlong, x: c_float, y: c_float) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     line_to(path, false, x, y)
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_bezier_curve_to(path: c_longlong, cp1x: c_float,
-                                                 cp1y: c_float,
-                                                 cp2x: c_float,
-                                                 cp2y: c_float,
-                                                 x: c_float,
-                                                 y: c_float) -> c_longlong {
+pub extern "C" fn native_path_2d_bezier_curve_to(
+    path: c_longlong,
+    cp1x: c_float,
+    cp1y: c_float,
+    cp2x: c_float,
+    cp2y: c_float,
+    x: c_float,
+    y: c_float,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     bezier_curve_to(path, false, cp1x, cp1y, cp2x, cp2y, x, y)
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_quadratic_curve_to(path: c_longlong, cpx: c_float,
-                                                    cpy: c_float,
-                                                    x: c_float,
-                                                    y: c_float) -> c_longlong {
+pub extern "C" fn native_path_2d_quadratic_curve_to(
+    path: c_longlong,
+    cpx: c_float,
+    cpy: c_float,
+    x: c_float,
+    y: c_float,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     quadratic_curve_to(path, false, cpx, cpy, x, y)
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_arc(path: c_longlong, x: c_float,
-                                     y: c_float,
-                                     radius: c_float,
-                                     start_angle: c_float,
-                                     end_angle: c_float,
-                                     anticlockwise: bool) -> c_longlong {
+pub extern "C" fn native_path_2d_arc(
+    path: c_longlong,
+    x: c_float,
+    y: c_float,
+    radius: c_float,
+    start_angle: c_float,
+    end_angle: c_float,
+    anticlockwise: bool,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
-    arc(path, false, x, y, radius, start_angle, end_angle, anticlockwise)
+    arc(
+        path,
+        false,
+        x,
+        y,
+        radius,
+        start_angle,
+        end_angle,
+        anticlockwise,
+    )
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_arc_to(path: c_longlong, x1: c_float,
-                                        y1: c_float,
-                                        x2: c_float,
-                                        y2: c_float,
-                                        radius: c_float, ) -> c_longlong {
+pub extern "C" fn native_path_2d_arc_to(
+    path: c_longlong,
+    x1: c_float,
+    y1: c_float,
+    x2: c_float,
+    y2: c_float,
+    radius: c_float,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     arc_to(path, false, x1, y1, x2, y2, radius)
 }
 
 #[no_mangle]
-pub extern "C" fn native_path_2d_ellipse(path: c_longlong, x: c_float,
-                                         y: c_float,
-                                         radius_x: c_float,
-                                         radius_y: c_float,
-                                         rotation: c_float,
-                                         start_angle: c_float,
-                                         end_angle: c_float,
-                                         anticlockwise: bool) -> c_longlong {
+pub extern "C" fn native_path_2d_ellipse(
+    path: c_longlong,
+    x: c_float,
+    y: c_float,
+    radius_x: c_float,
+    radius_y: c_float,
+    rotation: c_float,
+    start_angle: c_float,
+    end_angle: c_float,
+    anticlockwise: bool,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
-    ellipse(path, false, x, y, radius_x, radius_y, rotation, start_angle, end_angle, anticlockwise)
+    ellipse(
+        path,
+        false,
+        x,
+        y,
+        radius_x,
+        radius_y,
+        rotation,
+        start_angle,
+        end_angle,
+        anticlockwise,
+    )
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_path_2d_rect(path: c_longlong, x: c_float,
-                                      y: c_float,
-                                      width: c_float,
-                                      height: c_float, ) -> c_longlong {
+pub extern "C" fn native_path_2d_rect(
+    path: c_longlong,
+    x: c_float,
+    y: c_float,
+    width: c_float,
+    height: c_float,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     rect(path, false, x, y, width, height)
 }
@@ -349,32 +268,39 @@ pub extern "C" fn native_init_legacy(
     height: c_int,
     buffer_id: c_int,
     scale: c_float,
+    direction: *const c_char,
 ) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let interface = gpu::gl::Interface::new_native();
     let context = Context::new_gl(interface);
     let mut ctx = context.unwrap();
-    let mut k_gr_cache_max_count = 8192;
-    let mut _k_gr_cache_max_byte_size = 24 * (1 << 20);
-    let max_bytes = width * height * 12 * 4;
-    ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: k_gr_cache_max_count, max_resource_bytes: max_bytes as usize });
+    let max_bytes = width * height * 12 * 4 * 10;
+    ctx.set_resource_cache_limit(max_bytes as usize);
     let mut frame_buffer = gpu::gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
-    let target = BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);
+    let target =
+        BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);
     let surface_props = SurfaceProps::new(SurfacePropsFlags::default(), PixelGeometry::Unknown);
-    let surface_holder = Surface::from_backend_render_target(&mut ctx, &target, gpu::SurfaceOrigin::BottomLeft, ColorType::RGBA8888, None, Some(&surface_props));
+    let surface_holder = Surface::from_backend_render_target(
+        &mut ctx,
+        &target,
+        gpu::SurfaceOrigin::BottomLeft,
+        ColorType::RGBA8888,
+        None,
+        Some(&surface_props),
+    );
     let mut surface = surface_holder.unwrap();
     let mut stroke_paint = Paint::default();
-    stroke_paint.set_anti_alias(true);
-    stroke_paint.set_color(Color::from(COLOR_BLACK));
+    stroke_paint.set_anti_alias(false);
+    stroke_paint.set_color(Color::BLACK);
     stroke_paint.set_stroke_width(1.0);
     stroke_paint.set_style(Style::Stroke);
     stroke_paint.set_stroke_join(Join::Miter);
     stroke_paint.set_stroke_cap(Cap::Butt);
     stroke_paint.set_stroke_miter(10.0);
     let mut fill_paint = Paint::default();
-    fill_paint.set_anti_alias(true);
-    fill_paint.set_color(Color::from(COLOR_BLACK));
+    fill_paint.set_anti_alias(false);
+    fill_paint.set_color(Color::BLACK);
     fill_paint.set_style(Style::Fill);
     fill_paint.set_stroke_miter(10.0);
     fill_paint.set_stroke_join(Join::Miter);
@@ -383,7 +309,7 @@ pub extern "C" fn native_init_legacy(
     let default_type_face =
         Typeface::from_name("sans-serif", FontStyle::normal()).unwrap_or(Typeface::default());
     let mut font = Font::from_typeface(&default_type_face, Some(10.0));
-
+    let direction = unsafe { CStr::from_ptr(direction) }.to_str().unwrap_or("ltr");
     let mut canvas_native = CanvasNative {
         surface,
         stroke_paint,
@@ -394,27 +320,31 @@ pub extern "C" fn native_init_legacy(
         state: vec![],
         line_dash_offset: 0.0,
         shadow_blur: 0.0,
-        shadow_color: COLOR_BLACK as u32,
+        shadow_color: COLOR_TRANSPARENT as u32,
         shadow_offset_x: 0.0,
         shadow_offset_y: 0.0,
-        image_smoothing_enabled: false,
+        image_smoothing_enabled: true,
         image_smoothing_quality: "low".to_string(),
         device_scale: scale,
-        text_align: "left".to_string(),
+        text_align: "start".to_string(),
         ios: 0,
+        global_composite_operation: CanvasCompositeOperationType::SourceOver,
+        line_cap: "butt".to_string(),
+        line_join: "miter".to_string(),
+        direction: direction.to_string(),
+        miter_limit: 10.0,
+        surface_kind: SurfaceKind::GPU
     };
     Box::into_raw(Box::new(canvas_native)) as *mut _ as i64
 }
 
-
 #[no_mangle]
 pub extern "C" fn native_init(
-    width: c_int,
-    height: c_int,
     device: *mut c_void,
     queue: *mut c_void,
     view: *mut c_void,
     scale: c_float,
+    direction: *const c_char,
 ) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let mut context = unsafe { gpu::Context::new_metal(device, queue) }.unwrap();
@@ -431,16 +361,16 @@ pub extern "C" fn native_init(
 
     let mut surface = surface_holder.unwrap();
     let mut stroke_paint = Paint::default();
-    stroke_paint.set_anti_alias(true);
-    stroke_paint.set_color(Color::from(COLOR_BLACK));
+    stroke_paint.set_anti_alias(false);
+    stroke_paint.set_color(Color::BLACK);
     stroke_paint.set_stroke_width(1.0);
     stroke_paint.set_style(Style::Stroke);
     stroke_paint.set_stroke_join(Join::Miter);
     stroke_paint.set_stroke_cap(Cap::Butt);
     stroke_paint.set_stroke_miter(10.0);
     let mut fill_paint = Paint::default();
-    fill_paint.set_anti_alias(true);
-    fill_paint.set_color(Color::from(COLOR_BLACK));
+    fill_paint.set_anti_alias(false);
+    fill_paint.set_color(Color::BLACK);
     fill_paint.set_style(Style::Fill);
     fill_paint.set_stroke_miter(10.0);
     fill_paint.set_stroke_join(Join::Miter);
@@ -449,9 +379,8 @@ pub extern "C" fn native_init(
     let default_type_face =
         Typeface::from_name("sans-serif", FontStyle::normal()).unwrap_or(Typeface::default());
     let mut font = Font::from_typeface(&default_type_face, Some(10.0));
-
     let ios = Box::new((device, queue, null_mut() as *mut c_void));
-
+    let direction = unsafe { CStr::from_ptr(direction) }.to_str().unwrap_or("ltr");
     let mut canvas_native = CanvasNative {
         surface,
         stroke_paint,
@@ -462,14 +391,20 @@ pub extern "C" fn native_init(
         state: vec![],
         line_dash_offset: 0.0,
         shadow_blur: 0.0,
-        shadow_color: COLOR_BLACK as u32,
+        shadow_color: COLOR_TRANSPARENT as u32,
         shadow_offset_x: 0.0,
         shadow_offset_y: 0.0,
-        image_smoothing_enabled: false,
+        image_smoothing_enabled: true,
         image_smoothing_quality: "low".to_string(),
         device_scale: scale,
-        text_align: "left".to_string(),
+        text_align: "start".to_string(),
+        global_composite_operation: CanvasCompositeOperationType::SourceOver,
+        line_cap: "butt".to_string(),
+        line_join: "miter".to_string(),
+        direction: direction.to_string(),
         ios: Box::into_raw(ios) as *mut _ as i64,
+        miter_limit: 10.0,
+        surface_kind: SurfaceKind::GPU
     };
     Box::into_raw(Box::new(canvas_native)) as *mut _ as i64
 }
@@ -508,11 +443,11 @@ pub extern "C" fn native_get_ios_device(canvas_native_ptr: c_longlong) -> Canvas
 
 #[no_mangle]
 pub extern "C" fn native_surface_resized(
-    width: c_int,
-    height: c_int,
-    device: *mut c_void,
-    queue: *mut c_void,
-    scale: c_float,
+    _width: c_int,
+    _height: c_int,
+    _device: *mut c_void,
+    _queue: *mut c_void,
+    _scale: c_float,
     current_canvas: c_longlong,
 ) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
@@ -520,29 +455,37 @@ pub extern "C" fn native_surface_resized(
     Box::into_raw(canvas_native) as *mut _ as i64
 }
 
-
 #[no_mangle]
 pub extern "C" fn native_surface_resized_legacy(
     width: c_int,
     height: c_int,
     buffer_id: c_int,
-    scale: c_float,
+    _scale: c_float,
     canvas_native_ptr: c_longlong,
 ) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
-    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
-    let mut kGrCacheMaxCount = 8192;
-    let mut kGrCacheMaxByteSize = 24 * (1 << 20);
+    let mut canvas_native: Box<CanvasNative> =
+        unsafe { Box::from_raw(canvas_native_ptr as *mut _) };
     let mut context = canvas_native.context.unwrap();
+    let max_bytes = width * height * 12 * 4 * 10;
+    context.set_resource_cache_limit(max_bytes as usize);
     let mut surface = &mut canvas_native.surface;
     context.flush();
     let snapshot = surface.image_snapshot();
     // context.set_resource_cache_limit(kGrCacheMaxByteSize);
     let mut frame_buffer = gpu::gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
-    let target = BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);
+    let target =
+        BackendRenderTarget::new_gl((width as i32, height as i32), Some(1), 8, frame_buffer);
     let surface_props = SurfaceProps::new(SurfacePropsFlags::default(), PixelGeometry::Unknown);
-    let surface_holder = Surface::from_backend_render_target(&mut context, &target, gpu::SurfaceOrigin::BottomLeft, ColorType::RGBA8888, None, Some(&surface_props));
+    let surface_holder = Surface::from_backend_render_target(
+        &mut context,
+        &target,
+        gpu::SurfaceOrigin::BottomLeft,
+        ColorType::n32(),
+        None,
+        Some(&surface_props),
+    );
     let mut surface = surface_holder.unwrap();
     let mut canvas = surface.canvas();
     canvas.draw_image(snapshot, Point::new(0f32, 0f32), None);
@@ -551,7 +494,6 @@ pub extern "C" fn native_surface_resized_legacy(
     canvas_native.surface = surface;
     Box::into_raw(canvas_native) as *mut _ as i64
 }
-
 
 fn update_surface(canvas_native_ptr: c_longlong, view: *mut c_void) -> c_longlong {
     if view.is_null() {
@@ -594,7 +536,12 @@ pub extern "C" fn native_is_point_in_path(canvas_ptr: i64, x: f32, y: f32) -> c_
 }
 
 #[no_mangle]
-pub extern "C" fn native_is_point_in_path_with_rule(canvas_ptr: i64, x: f32, y: f32, fill_rule: *const c_char) -> c_uchar {
+pub extern "C" fn native_is_point_in_path_with_rule(
+    canvas_ptr: i64,
+    x: f32,
+    y: f32,
+    fill_rule: *const c_char,
+) -> c_uchar {
     let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
     let path = canvas_native.path.clone();
     let _ = Box::into_raw(canvas_native);
@@ -604,14 +551,20 @@ pub extern "C" fn native_is_point_in_path_with_rule(canvas_ptr: i64, x: f32, y: 
     result
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_is_point_in_path_with_path_rule(canvas_ptr: i64, path: i64, x: f32, y: f32, fill_rule: *const c_char) -> c_uchar {
+pub extern "C" fn native_is_point_in_path_with_path_rule(
+    canvas_ptr: i64,
+    path: i64,
+    x: f32,
+    y: f32,
+    fill_rule: *const c_char,
+) -> c_uchar {
     let result = is_point_in_path(canvas_ptr, path, x, y, fill_rule);
-    if result { return 1; }
+    if result {
+        return 1;
+    }
     return 0;
 }
-
 
 #[no_mangle]
 pub extern "C" fn native_is_point_in_stroke(canvas_ptr: i64, x: f32, y: f32) -> c_uchar {
@@ -624,11 +577,17 @@ pub extern "C" fn native_is_point_in_stroke(canvas_ptr: i64, x: f32, y: f32) -> 
     result
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_is_point_in_stroke_with_path(canvas_ptr: i64, path: i64, x: f32, y: f32) -> c_uchar {
+pub extern "C" fn native_is_point_in_stroke_with_path(
+    canvas_ptr: i64,
+    path: i64,
+    x: f32,
+    y: f32,
+) -> c_uchar {
     let result = is_point_in_stroke(canvas_ptr, path, x, y);
-    if result { return 1; }
+    if result {
+        return 1;
+    }
     return 0;
 }
 
@@ -667,7 +626,11 @@ pub extern "C" fn native_begin_path(canvas_native_ptr: c_longlong) -> c_longlong
 }
 
 #[no_mangle]
-pub extern "C" fn native_stroke_path(canvas_native_ptr: c_longlong, path: c_longlong, view: *mut c_void) -> c_longlong {
+pub extern "C" fn native_stroke_path(
+    canvas_native_ptr: c_longlong,
+    path: c_longlong,
+    view: *mut c_void,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     stroke_path(canvas_native_ptr, path)
@@ -688,14 +651,23 @@ pub extern "C" fn native_fill(canvas_native_ptr: c_longlong, view: *mut c_void) 
 }
 
 #[no_mangle]
-pub extern "C" fn native_fill_rule(canvas_native_ptr: c_longlong, rule: *const c_char, view: *mut c_void) -> c_longlong {
+pub extern "C" fn native_fill_rule(
+    canvas_native_ptr: c_longlong,
+    rule: *const c_char,
+    view: *mut c_void,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     fill_rule(canvas_native_ptr, rule)
 }
 
 #[no_mangle]
-pub extern "C" fn native_fill_path_rule(canvas_native_ptr: c_longlong, path_ptr: c_longlong, rule: *const c_char, view: *mut c_void) -> c_longlong {
+pub extern "C" fn native_fill_path_rule(
+    canvas_native_ptr: c_longlong,
+    path_ptr: c_longlong,
+    rule: *const c_char,
+    view: *mut c_void,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     fill_path_rule(canvas_native_ptr, path_ptr, rule)
@@ -826,6 +798,67 @@ pub extern "C" fn native_move_to(
 }
 
 #[no_mangle]
+pub extern "C" fn native_create_pattern(
+    image_array: *mut u8,
+    image_size: size_t,
+    original_width: c_int,
+    original_height: c_int,
+    repetition: *const c_char,
+) -> c_longlong {
+    create_pattern(
+        image_array,
+        image_size,
+        original_width,
+        original_height,
+        repetition,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn native_create_pattern_encoded(
+    image_array: *mut u8,
+    image_size: size_t,
+    repetition: *const c_char,
+) -> c_longlong {
+    create_pattern_encoded(
+        image_array,
+        image_size,
+        repetition,
+    )
+}
+
+#[no_mangle]
+pub extern "C" fn native_free_pattern(pattern: c_longlong) {
+    free_pattern(pattern)
+}
+
+#[no_mangle]
+pub extern "C" fn native_set_pattern_transform(
+    pattern: c_longlong,
+    matrix: c_longlong,
+) -> c_longlong {
+    set_pattern_transform(pattern, matrix)
+}
+
+#[no_mangle]
+pub extern "C" fn native_set_fill_pattern(
+    canvas_native_ptr: c_longlong,
+    pattern: c_longlong,
+) -> c_longlong {
+    let _auto_release_pool = AutoreleasePool::new();
+    set_fill_pattern(canvas_native_ptr, pattern)
+}
+
+#[no_mangle]
+pub extern "C" fn native_set_stroke_pattern(
+    canvas_native_ptr: c_longlong,
+    pattern: c_longlong,
+) -> c_longlong {
+    let _auto_release_pool = AutoreleasePool::new();
+    set_stroke_pattern(canvas_native_ptr, pattern)
+}
+
+#[no_mangle]
 pub extern "C" fn native_set_fill_color_rgba(
     canvas_native_ptr: c_longlong,
     red: u8,
@@ -837,12 +870,8 @@ pub extern "C" fn native_set_fill_color_rgba(
     set_fill_color_rgba(canvas_native_ptr, red, green, blue, alpha)
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_set_fill_color(
-    canvas_native_ptr: c_longlong,
-    color: i32,
-) -> c_longlong {
+pub extern "C" fn native_set_fill_color(canvas_native_ptr: c_longlong, color: u32) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     set_fill_color(canvas_native_ptr, color as u32)
 }
@@ -857,7 +886,7 @@ pub extern "C" fn native_set_fill_gradient_radial(
     y1: c_float,
     radius_1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
 ) -> c_longlong {
@@ -888,7 +917,7 @@ pub extern "C" fn native_set_stroke_gradient_radial(
     y1: c_float,
     radius_1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
 ) -> c_longlong {
@@ -917,7 +946,7 @@ pub extern "C" fn native_set_fill_gradient_linear(
     x1: c_float,
     y1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
 ) -> c_longlong {
@@ -944,7 +973,7 @@ pub extern "C" fn native_set_stroke_gradient_linear(
     x1: c_float,
     y1: c_float,
     colors_size: size_t,
-    colors_array: *const size_t,
+    colors_array: *const c_uint,
     positions_size: size_t,
     positions_array: *const c_float,
 ) -> c_longlong {
@@ -975,14 +1004,10 @@ pub extern "C" fn native_set_stroke_color_rgba(
     set_stroke_color_rgba(canvas_native_ptr, red, green, blue, alpha)
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_set_stroke_color(
-    canvas_native_ptr: c_longlong,
-    color: i32,
-) -> c_longlong {
+pub extern "C" fn native_set_stroke_color(canvas_native_ptr: c_longlong, color: u32) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
-    set_stroke_color(canvas_native_ptr, color as u32)
+    set_stroke_color(canvas_native_ptr, color)
 }
 
 #[no_mangle]
@@ -1000,7 +1025,10 @@ pub extern "C" fn native_clear_rect(
 }
 
 #[no_mangle]
-pub extern "C" fn native_clear_canvas(canvas_native_ptr: c_longlong, view: *mut c_void) -> c_longlong {
+pub extern "C" fn native_clear_canvas(
+    canvas_native_ptr: c_longlong,
+    view: *mut c_void,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     clear_canvas(canvas_native_ptr)
@@ -1106,7 +1134,11 @@ pub extern "C" fn native_set_transform(
 }
 
 #[no_mangle]
-pub extern "C" fn native_rotate(canvas_native_ptr: c_longlong, angle: c_float, view: *mut c_void) -> c_longlong {
+pub extern "C" fn native_rotate(
+    canvas_native_ptr: c_longlong,
+    angle: c_float,
+    view: *mut c_void,
+) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     rotate(canvas_native_ptr, angle)
@@ -1158,6 +1190,14 @@ pub extern "C" fn native_draw_image_raw(
         dx,
         dy,
     )
+}
+
+
+#[no_mangle]
+pub unsafe extern "C" fn native_snapshot_canvas(
+    canvas_native_ptr: c_longlong,
+) -> NativeByteArray {
+    snapshot_canvas(canvas_native_ptr)
 }
 
 #[no_mangle]
@@ -1429,10 +1469,7 @@ pub extern "C" fn native_reset_transform(canvas_native_ptr: c_longlong) -> c_lon
 }
 
 #[no_mangle]
-pub extern "C" fn native_clip(
-    canvas_native_ptr: c_longlong,
-    view: *mut c_void,
-) -> c_longlong {
+pub extern "C" fn native_clip(canvas_native_ptr: c_longlong, view: *mut c_void) -> c_longlong {
     let _auto_release_pool = AutoreleasePool::new();
     let canvas_native_ptr = update_surface(canvas_native_ptr, view);
     clip(canvas_native_ptr)
@@ -1532,14 +1569,15 @@ pub extern "C" fn native_drop_text_metrics(data: CanvasTextMetrics) {
     Box::new(data);
 }
 
-
 #[no_mangle]
 pub extern "C" fn native_get_current_transform(canvas_native_ptr: c_longlong) -> c_longlong {
     get_current_transform(canvas_native_ptr)
 }
 
-
 #[no_mangle]
-pub extern "C" fn native_set_current_transform(canvas_native_ptr: c_longlong, matrix: c_longlong) -> c_longlong {
+pub extern "C" fn native_set_current_transform(
+    canvas_native_ptr: c_longlong,
+    matrix: c_longlong,
+) -> c_longlong {
     set_current_transform(canvas_native_ptr, matrix)
 }

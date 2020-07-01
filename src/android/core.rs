@@ -3,39 +3,52 @@
 #![allow(non_snake_case)]
 extern crate libc;
 
-use std::borrow::{Borrow, BorrowMut};
 use std::ffi::{CStr, CString};
-use std::fs::Metadata;
-use std::io::{Error, Read};
+use std::io::Read;
 use std::mem;
-use std::ops::Deref;
-use std::os::raw::{c_char, c_float, c_longlong, c_void};
-use std::ptr::null_mut;
+use std::os::raw::{c_void};
+use std::ptr::{null_mut};
 use std::string::String;
-
 use android_logger::Config;
-use jni::{JNIEnv, sys};
-use jni::objects::{JClass, JObject, JString, JValue};
-use jni::strings::JavaStr;
-use jni::sys::{jboolean, jint, jintArray, jlong, jobject, jstring};
-use jni_sys::{jbyte, jbyteArray, jfloat, jfloatArray, JNI_FALSE, JNI_TRUE};
-use libc::{c_int, size_t};
+use jni::{
+    JNIEnv,
+    objects::{JClass, JObject, JString, JValue},
+    strings::JavaStr,
+    sys::{jboolean, jint, jintArray, jlong, jstring},
+};
+use jni_sys::{jbyte, jbyteArray, jfloat, jfloatArray, JNI_FALSE, JNI_TRUE, jobject};
+use libc::{size_t};
 use log::{debug, info};
 use log::Level;
-use skia_safe::{AlphaType, Bitmap, BlendMode, Canvas, Color, ColorSpace, ColorType, Data, FilterQuality, Font, FontMetrics, FontStyle, FontStyleWeight, FontStyleWidth, Image, ImageInfo, IPoint, ISize, MaskFilter, Paint, Path, PixelGeometry, Pixmap, Point, Rect, Size, Surface, SurfaceProps, SurfacePropsFlags, TextBlob, Typeface};
-use skia_safe::gpu::{BackendRenderTarget, Context, gl, ResourceCacheLimits, SurfaceOrigin};
-use skia_safe::gpu::gl::Interface;
-use skia_safe::image_filters::image;
-use skia_safe::paint::{Cap, Join, Style};
-use skia_safe::path::Direction;
+use skia_safe::{
+    Color,
+    ColorSpace,
+    ColorType,
+    Font,
+    FontStyle,
+    ImageInfo,
+    ISize,
+    Paint,
+    Path,
+    PixelGeometry,
+    Point,
+    Rect,
+    Surface,
+    SurfaceProps,
+    SurfacePropsFlags,
+    Typeface,
+    gpu::{BackendRenderTarget, Context, gl, ResourceCacheLimits, SurfaceOrigin},
+    gpu::gl::Interface,
+    image_filters::image,
+    paint::{Cap, Join, Style},
+    path::Direction,
+};
 
 use crate::android::bitmap::{
     ANDROID_BITMAP_RESULT_SUCCESS, AndroidBitmap_getInfo, AndroidBitmap_lockPixels, AndroidBitmap_unlockPixels,
     AndroidBitmapInfo,
 };
-use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasNative, CanvasState, CanvasStateItem, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, create_image_asset, create_image_data, create_matrix, create_path_2d_from_path_data, create_path_from_path, draw_image, draw_image_dw, draw_image_sw, draw_rect, draw_svg_image, draw_text, ellipse, ellipse_no_rotation, fill, fill_path_rule, fill_rule, flush, free_matrix, free_path_2d, get_current_transform, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_load_from_slice_i8, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_style, is_font_weight, is_point_in_path, is_point_in_stroke, line_to, move_to, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_fill_color, set_fill_color_rgba, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_text_align, set_transform, stroke, stroke_path, SVGCanvasNative, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_byte_slice, to_data, to_data_url, transform, translate};
-
-pub const COLOR_BLACK: usize = 0xff000000 as usize;
+use crate::common::{add_path_to_path, add_path_to_path_with_matrix, adjust_end_angle, arc, arc_to, begin_path, bezier_curve_to, CanvasCompositeOperationType, CanvasNative, CanvasState, CanvasStateItem, clear_canvas, clear_rect, clip, clip_path_rule, clip_rule, close_path, COLOR_TRANSPARENT, create_image_asset, create_image_data, create_matrix, create_path_2d_from_path_data, create_path_from_path, create_pattern, create_pattern_encoded, draw_image, draw_image_dw, draw_image_dw_encoded, draw_image_encoded, draw_image_sw, draw_image_sw_encoded, draw_rect, draw_text, ellipse, ellipse_no_rotation, fill, fill_path_rule, fill_rule, flush, free_matrix, free_path_2d, free_pattern, free_snapshot, get_current_transform, get_direction, get_image_data, get_matrix, get_measure_text, image_asset_flip_x, image_asset_flip_y, image_asset_flip_y_in_place_owned, image_asset_free_bytes, image_asset_get_bytes, image_asset_get_error, image_asset_height, image_asset_load_from_path, image_asset_load_from_raw, image_asset_load_from_slice_i8, image_asset_release, image_asset_save_path, image_asset_scale, image_asset_width, is_font_size, is_font_style, is_font_weight, is_point_in_path, is_point_in_stroke, line_to, move_to, NativeByteArray, NativeImageAsset, put_image_data, quadratic_curve_to, rect, reset_transform, restore, rotate, save, scale, set_current_transform, set_direction, set_fill_color, set_fill_color_rgba, set_fill_pattern, set_font, set_global_alpha, set_global_composite_operation, set_gradient_linear, set_gradient_radial, set_image_smoothing_enabled, set_image_smoothing_quality, set_line_cap, set_line_dash, set_line_dash_offset, set_line_join, set_line_width, set_matrix, set_miter_limit, set_pattern_transform, set_shadow_blur, set_shadow_color, set_shadow_offset_x, set_shadow_offset_y, set_stroke_color, set_stroke_color_rgba, set_stroke_pattern, set_text_align, set_transform, snapshot_canvas, stroke, stroke_path, text_decoder_decode, text_decoder_get_encoding, text_encoder_encode, text_encoder_get_encoding, TextDecoder, TextEncoder, to_byte_slice, to_data, to_data_url, transform, translate, SurfaceKind, flush_custom_surface};
 
 #[no_mangle]
 pub extern "system" fn JNI_OnLoad() -> jint {
@@ -79,21 +92,23 @@ unsafe fn drawRect(
     draw_rect(canvas_native_ptr, x, y, width, height, is_stoke)
 }
 
-fn init(buffer_id: jint,
-        width: jint,
-        height: jint,
-        scale: jfloat, ) -> CanvasNative {
+fn init(
+    cpu: bool,
+    buffer_id: jint,
+    width: jint,
+    height: jint,
+    scale: jfloat, direction: String) -> CanvasNative {
     let mut stroke_paint = Paint::default();
-    stroke_paint.set_anti_alias(true);
-    stroke_paint.set_color(Color::from(COLOR_BLACK as u32));
+    stroke_paint.set_anti_alias(false);
+    stroke_paint.set_color(Color::BLACK);
     stroke_paint.set_stroke_width(1.0);
     stroke_paint.set_style(Style::Stroke);
     stroke_paint.set_stroke_join(Join::Miter);
     stroke_paint.set_stroke_cap(Cap::Butt);
     stroke_paint.set_stroke_miter(10.0);
     let mut fill_paint = Paint::default();
-    fill_paint.set_anti_alias(true);
-    fill_paint.set_color(Color::from(COLOR_BLACK as u32));
+    fill_paint.set_anti_alias(false);
+    fill_paint.set_color(Color::BLACK);
     fill_paint.set_style(Style::Fill);
     fill_paint.set_stroke_miter(10.0);
     fill_paint.set_stroke_join(Join::Miter);
@@ -103,47 +118,60 @@ fn init(buffer_id: jint,
         Typeface::from_name("sans-serif", FontStyle::default()).unwrap_or(Typeface::default());
     let mut font = Font::from_typeface(&default_type_face, Some(10.0));
     let state: Vec<CanvasStateItem> = Vec::new();
+    let mut surface;
+    let surface_kind;
+    let mut ctx = None;
+    if !cpu {
+        let interface = gl::Interface::new_native();
+        let context = Context::new_gl(interface.unwrap());
+        let mut internal_ctx = context.unwrap();
+        let mut frame_buffer = gl::FramebufferInfo::from_fboid(buffer_id as u32);
+        frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
+        let target =
+            BackendRenderTarget::new_gl((width as i32, height as i32), Some(0), 8, frame_buffer);
+        let surface_props = SurfaceProps::new(SurfacePropsFlags::default(), PixelGeometry::Unknown);
+        let color_space = ColorSpace::new_srgb();
+        let surface_holder = Surface::from_backend_render_target(
+            &mut internal_ctx,
+            &target,
+            SurfaceOrigin::BottomLeft,
+            ColorType::RGBA8888,
+            Some(color_space),
+            Some(&surface_props),
+        );
+        ctx = Some(internal_ctx);
+        surface = surface_holder.unwrap();
+        surface_kind = SurfaceKind::GPU;
+    } else {
+        surface = Surface::new_raster_n32_premul(ISize::new(width, height)).unwrap();
+        surface_kind = SurfaceKind::CPU;
+    }
 
-    let interface = gl::Interface::new_native();
-    let context = Context::new_gl(interface.unwrap());
-    let mut ctx = context.unwrap();
-    let mut k_gr_cache_max_count = 8192;
-    let mut _k_gr_cache_max_byte_size = 24 * (1 << 20);
-    let max_bytes = width * height * 12 * 5;
-    //ctx.set_resource_cache_limits(ResourceCacheLimits { max_resources: k_gr_cache_max_count, max_resource_bytes: max_bytes as usize });
-    let mut frame_buffer = gl::FramebufferInfo::from_fboid(buffer_id as u32);
-    frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
-    let target =
-        BackendRenderTarget::new_gl((width as i32, height as i32), Some(0), 8, frame_buffer);
-    let surface_props = SurfaceProps::new(SurfacePropsFlags::default(), PixelGeometry::Unknown);
-    let color_space = ColorSpace::new_srgb();
-    let surface_holder = Surface::from_backend_render_target(
-        &mut ctx,
-        &target,
-        SurfaceOrigin::BottomLeft,
-        ColorType::RGBA8888,
-        Some(color_space),
-        Some(&surface_props),
-    );
-    let mut surface = surface_holder.unwrap();
+
     let mut native_canvas = CanvasNative {
         surface,
         stroke_paint,
         fill_paint,
         path: Path::new(),
-        context: Some(ctx),
+        context: ctx,
         font,
         state,
         line_dash_offset: 0.0,
         shadow_blur: 0.0,
-        shadow_color: COLOR_BLACK as u32,
+        shadow_color: COLOR_TRANSPARENT as u32,
         shadow_offset_x: 0.0,
         shadow_offset_y: 0.0,
-        image_smoothing_enabled: false,
+        image_smoothing_enabled: true,
         image_smoothing_quality: "low".to_string(),
         device_scale: scale,
-        text_align: "left".to_string(),
+        text_align: "start".to_string(),
         ios: 0,
+        global_composite_operation: CanvasCompositeOperationType::SourceOver,
+        line_cap: "butt".to_string(),
+        line_join: "miter".to_string(),
+        direction,
+        miter_limit: 10.0,
+        surface_kind,
     };
 
     native_canvas
@@ -163,7 +191,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_FileReader_nativeRead(e
                 }
             } as usize;
             let mut data = vec![0u8; len];
-            file.read_to_end(&mut data);
+            let _ = file.read_to_end(&mut data);
             data
         }
         Err(e) => {
@@ -174,240 +202,37 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_FileReader_nativeRead(e
     env.byte_array_from_slice(result.as_slice()).unwrap()
 }
 
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextEncoder_nativeInit(env: JNIEnv, _: JClass, encoding: JString) -> jlong {
-    let empty = env.new_string("").unwrap();
-    let mut value = env.get_string(encoding).unwrap_or(JavaStr::from_env(&env, empty).unwrap());
-    Box::into_raw(Box::new(TextEncoder::new(value.get_raw()))) as i64
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextEncoder_nativeGetEncoding(env: JNIEnv, _: JClass, encoder: i64) -> jstring {
-    let encoding = text_encoder_get_encoding(encoder);
-    let value = CStr::from_ptr(encoding).to_str().unwrap_or("");
-    env.new_string(value).unwrap().into_inner()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextEncoder_nativeEncode(env: JNIEnv, _: JClass, encoder: i64, text: JString) -> jbyteArray {
-    let empty = env.new_string("").unwrap();
-    let mut string = env.get_string(text).unwrap_or(JavaStr::from_env(&env, empty).unwrap());
-    let rawArray = text_encoder_encode(encoder, string.as_ptr());
-    let rawSlice = std::slice::from_raw_parts_mut(rawArray.array, rawArray.length);
-    let javaArray = env.byte_array_from_slice(rawSlice).unwrap();
-    let _ = Box::from_raw(rawSlice).to_vec();
-    javaArray
-}
-
-
-#[no_mangle]
-pub extern "C" fn Java_com_github_triniwiz_canvas_TextDecoder_nativeInit(env: JNIEnv, _: JClass, decoding: JString) -> jlong {
-    let empty = env.new_string("").unwrap();
-    let mut value = env.get_string(decoding).unwrap_or(JavaStr::from_env(&env, empty).unwrap());
-    Box::into_raw(Box::new(TextDecoder::new(value.get_raw()))) as i64
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextDecoder_nativeGetEncoding(env: JNIEnv, _: JClass, decoder: i64) -> jstring {
-    let encoding = text_decoder_get_encoding(decoder);
-    let value = CStr::from_ptr(encoding).to_str().unwrap_or("");
-    env.new_string(value).unwrap().into_inner()
-}
-
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_TextDecoder_nativeDecode(env: JNIEnv, _: JClass, decoder: i64, data: jbyteArray) -> jstring {
-    let len = env.get_array_length(data).unwrap_or(0);
-    let mut rawData = vec![0i8; len as usize];
-    env.get_byte_array_region(data, 0, rawData.as_mut_slice());
-    let buf = unsafe { &*(rawData.as_mut_slice() as *mut [i8] as *mut [u8]) };
-    let decoded = text_decoder_decode(decoder, buf.as_ptr(), rawData.len());
-    let value = CStr::from_ptr(decoded).to_str().unwrap_or("");
-    env.new_string(value).unwrap().into_inner()
-}
-
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeInit(_env: JNIEnv, _: JClass) -> jlong {
-    create_image_asset()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetBytes(env: JNIEnv, _: JClass, asset: jlong) -> jbyteArray {
-    let mut array = image_asset_get_bytes(asset);
-    let bytes = std::slice::from_raw_parts(array.array as *const u8, array.length);
-    let result = env.byte_array_from_slice(bytes).unwrap_or(env.new_byte_array(0).unwrap());
-    image_asset_free_bytes(array);
-    result
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetWidth(_env: JNIEnv, _: JClass, asset: jlong) -> jint {
-    image_asset_width(asset) as i32
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetHeight(_env: JNIEnv, _: JClass, asset: jlong) -> jint {
-    image_asset_height(asset) as i32
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeScale(_env: JNIEnv, _: JClass, asset: jlong, x: jint, y: jint) -> jlong {
-    image_asset_scale(asset, x as u32, y as u32)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipX(_env: JNIEnv, _: JClass, asset: jlong) -> jlong {
-    image_asset_flip_x(asset)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeSave(env: JNIEnv, _: JClass, asset: jlong, path: JString, format: jint) -> jboolean {
-    let real_path = env.get_string(path).unwrap();
-    image_asset_save_path(asset, real_path.get_raw(), format as u32) as u8
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeFlipY(_env: JNIEnv, _: JClass, asset: jlong) -> jlong {
-    image_asset_flip_y(asset)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeGetError(env: JNIEnv, _: JClass, asset: jlong) -> jstring {
-    let error = image_asset_get_error(asset);
-    let string = CStr::from_ptr(error).to_str();
-    env.new_string(string.unwrap_or("")).unwrap().into_inner()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeRelease(_env: JNIEnv, _: JClass, asset: jlong) {
-    image_asset_release(asset)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeLoadAssetPath(env: JNIEnv, _: JClass, asset: jlong, path: JString) -> jboolean {
-    let real_path = env.get_string(path).unwrap();
-    image_asset_load_from_path(asset, real_path.get_raw()) as u8
-}
-
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_ImageAsset_nativeLoadAssetBuffer(env: JNIEnv, _: JClass, asset: jlong, buffer: jbyteArray) -> jboolean {
-    let size = env.get_array_length(buffer).unwrap_or(0);
-    let mut buf = vec![0i8; size as usize];
-    env.get_byte_array_region(buffer, 0, buf.as_mut_slice());
-    image_asset_load_from_slice_i8(asset, buf.as_mut_slice()) as u8
-}
-
-
-unsafe fn flip_in_place_3d(env: JNIEnv, pixels: jbyteArray, width: jint, height: jint, depth: jint) {
+pub(crate) unsafe fn flip_in_place_3d(env: JNIEnv, pixels: jbyteArray, width: jint, height: jint, depth: jint) {
     let size = env.get_array_length(pixels).unwrap_or(0);
     let mut array = vec![0i8; size as usize];
-    env.get_byte_array_region(pixels, 0, array.as_mut_slice());
+    let _ = env.get_byte_array_region(pixels, 0, array.as_mut_slice());
     let mut data = array.as_mut_ptr();
     for _z in 0..depth {
         flip_in_place_native(data, width, height);
         data.offset((4 * width * height) as isize);
+
     }
-    env.set_byte_array_region(pixels, 0, array.as_mut_slice());
+    let _didWrite = env.set_byte_array_region(pixels, 0, array.as_mut_slice());
 }
 
-unsafe fn flip_in_place_native(pixels: *mut i8, width: i32, height: i32) {
+pub(crate) unsafe fn flip_in_place_native(pixels: *mut i8, width: i32, height: i32) {
     image_asset_flip_y_in_place_owned(width as u32, height as u32, pixels as *mut u8, (width * height * 4) as usize);
 }
 
-
-unsafe fn flip_in_place(env: JNIEnv, pixels: jbyteArray, width: jint, height: jint) {
+pub(crate) unsafe fn flip_in_place(env: JNIEnv, pixels: jbyteArray, width: jint, height: jint) {
     let line_size = width * 4;
     let mut line_buffer_storage = vec![0i8; line_size as usize];
     let mut _line_buffer = line_buffer_storage.as_mut_ptr();
     let storage_size = env.get_array_length(pixels).unwrap_or(0);
     let mut data_storage = vec![0i8; storage_size as usize];
-    env.get_byte_array_region(pixels, 0, data_storage.as_mut_slice());
+    let _ = env.get_byte_array_region(pixels, 0, data_storage.as_mut_slice());
     let data = data_storage.as_mut_ptr();
 
     image_asset_flip_y_in_place_owned(width as u32, height as u32, data as *mut u8, storage_size as usize);
 
     let flipped = std::slice::from_raw_parts(data_storage.as_ptr(), data_storage.len());
-    env.set_byte_array_region(pixels, 0, flipped);
+    let _didWrite = env.set_byte_array_region(pixels, 0, flipped);
 }
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_WebGLRenderingContext_nativeFlipInPlace3D(env: JNIEnv, _: JClass, pixels: jbyteArray, width: jint, height: jint, depth: jint) {
-    flip_in_place_3d(env, pixels, width, height, depth);
-}
-
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_WebGLRenderingContext_nativeFlipInPlace(env: JNIEnv, _: JClass, pixels: jbyteArray, width: jint, height: jint) {
-    flip_in_place(env, pixels, width, height);
-}
-
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_WebGLRenderingContext_nativeBytesFromBitmap(env: JNIEnv, _: JClass, bitmap: JObject, flipY: jboolean) -> jbyteArray {
-    let native_interface = env.get_native_interface();
-    let bitmap_raw = bitmap.into_inner();
-    let bitmap_info = Box::into_raw(Box::new(AndroidBitmapInfo::default()));
-
-    if AndroidBitmap_getInfo(native_interface, bitmap_raw, bitmap_info)
-        < ANDROID_BITMAP_RESULT_SUCCESS
-    {
-        debug!("bytesFromBitmap get bitmap info failed");
-        return env.new_byte_array(0).unwrap();
-    }
-    let info_to_draw: Box<AndroidBitmapInfo> = Box::from_raw(bitmap_info);
-
-    let mut _dstPixelsToDraw = null_mut() as *mut c_void;
-    let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
-    if AndroidBitmap_lockPixels(native_interface, bitmap_raw, dstPixelsToDraw)
-        < ANDROID_BITMAP_RESULT_SUCCESS
-    {
-        debug!("bytesFromBitmap get bitmap lock failed");
-        return env.new_byte_array(0).unwrap();
-    }
-    let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
-    let length_to_draw =
-        ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
-
-    let ptr_to_draw = _dstPixelsToDraw as *mut _;
-    let mut pixels_to_draw: &mut [i8] =
-        std::slice::from_raw_parts_mut(ptr_to_draw as *mut _, length_to_draw as usize);
-    let mut storage;
-    if flipY == JNI_TRUE {
-        let width = info_to_draw.width;
-        let height = info_to_draw.height;
-        let line_size = width * 4;
-        let mut line_buffer_storage = vec![0i8; line_size as usize];
-        let mut line_buffer = line_buffer_storage.as_mut_ptr();
-        let mut data_storage = pixels_to_draw;
-        let data = data_storage.as_mut_ptr();
-        let half_height = height / 2;
-        for y in 0..half_height {
-            let top_line = data.offset(((y * line_size) as isize));
-            let bottom_line = data.offset((((height - y - 1) * line_size) as isize));
-            std::ptr::copy_nonoverlapping(top_line, line_buffer, line_size as usize);
-            std::ptr::copy_nonoverlapping(bottom_line, top_line, line_size as usize);
-            std::ptr::copy_nonoverlapping(bottom_line, line_buffer, line_size as usize);
-        }
-
-        let storage_slice = { &*(data_storage as *mut [i8] as *mut [u8]) };
-        storage = env.byte_array_from_slice(storage_slice).unwrap();
-    } else {
-        let storage_slice = { &*(pixels_to_draw as *mut [i8] as *mut [u8]) };
-        storage = env.byte_array_from_slice(storage_slice).unwrap();
-    }
-
-
-    if AndroidBitmap_unlockPixels(native_interface, bitmap_raw) < ANDROID_BITMAP_RESULT_SUCCESS
-    {
-        debug!("bytesFromBitmap unlock bitmap failed");
-    }
-
-    storage
-}
-
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeDestroy(
@@ -422,15 +247,29 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeDestro
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeInit(
-    _env: JNIEnv,
+    env: JNIEnv,
     _: JClass,
-    canvas_native_ptr: jlong,
+    cpu: jboolean,
     buffer_id: jint,
     width: jint,
     height: jint,
     scale: jfloat,
+    direction: JString,
 ) -> jlong {
-    Box::into_raw(Box::new(init(buffer_id, width, height, scale))) as *mut _ as i64
+   /* crate::android::bitmap::glTexImage2D(
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        null_mut(),
+    );*/
+    let dir = env.get_string(direction).unwrap();
+    let dir = dir.to_str().unwrap();
+    return Box::into_raw(Box::new(init(cpu == JNI_TRUE, buffer_id, width, height, scale, dir.to_owned()))) as *mut _ as i64;
 }
 
 
@@ -442,7 +281,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeResize
     buffer_id: jint,
     width: jint,
     height: jint,
-    scale: jfloat,
+    _scale: jfloat,
 ) -> jlong {
     if canvas_native_ptr == 0 {
         return canvas_native_ptr;
@@ -450,7 +289,8 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeResize
     let mut canvas_native: Box<CanvasNative> = Box::from_raw(canvas_native_ptr as *mut _);
     let mut surface = &mut canvas_native.surface;
     let mut ctx = canvas_native.context.unwrap();
-    surface.flush();
+    let mut canvas = surface.canvas();
+    canvas.flush();
     let mut frame_buffer = gl::FramebufferInfo::from_fboid(buffer_id as u32);
     frame_buffer.format = 0x8058; //GR_GL_RGBA8 (https://github.com/google/skia/blob/master/src/gpu/gl/GrGLDefines.h#L511)
     let target =
@@ -474,23 +314,23 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeResize
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeRecreate(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     buffer_id: jint,
     width: jint,
     height: jint,
-    scale: jfloat,
+    _scale: jfloat,
 ) -> jlong {
     if canvas_native_ptr < 0 {
         return canvas_native_ptr;
     }
     let mut canvas_native: Box<CanvasNative> = Box::from_raw(canvas_native_ptr as *mut _);
-    let mut ctx = canvas_native.context.unwrap();
+    // let mut ctx = canvas_native.context.unwrap();
     let mut surface = &mut canvas_native.surface;
     let mut canvas = surface.canvas();
     canvas.flush();
-    surface.flush();
+    // surface.flush();
     let mut ss = surface.image_snapshot();
     let mut interface = gl::Interface::new_native();
     let mut ctx = Context::new_gl(interface.unwrap()).unwrap();
@@ -523,11 +363,52 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeRecrea
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeFlush(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
     flush(canvas_native_ptr)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeCpuFlush(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    view: JObject,
+) -> jlong {
+    let native_interface = env.get_native_interface();
+    let bitmap_to_draw = view.into_inner();
+    let bitmapInfo_to_draw = Box::into_raw(Box::new(AndroidBitmapInfo::default()));
+
+    if AndroidBitmap_getInfo(native_interface, bitmap_to_draw, bitmapInfo_to_draw)
+        < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Get Bitmap Info Failed");
+        return 0;
+    }
+    let info_to_draw: Box<AndroidBitmapInfo> = Box::from_raw(bitmapInfo_to_draw);
+    let mut _dstPixelsToDraw = null_mut() as *mut c_void;
+    let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
+    if AndroidBitmap_lockPixels(native_interface, bitmap_to_draw, dstPixelsToDraw)
+        < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Get Bitmap Lock Failed");
+        return 0;
+    }
+    let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
+    let length_to_draw =
+        ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
+    let ptr_to_draw = _dstPixelsToDraw as *mut _;
+    let pixels_to_draw: &mut [u8] =
+        std::slice::from_raw_parts_mut(ptr_to_draw, length_to_draw as usize);
+
+    let ptr = flush_custom_surface(canvas_native_ptr, info_to_draw.width as i32, info_to_draw.height as i32, pixels_to_draw);
+    if AndroidBitmap_unlockPixels(native_interface, bitmap_to_draw) < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Unlock Bitmap Failed");
+    }
+    return ptr;
 }
 
 #[no_mangle]
@@ -539,6 +420,20 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToData
     let mut data = to_data(canvas_native_ptr);
     env.byte_array_from_slice(data.as_mut_slice())
         .unwrap()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeSnapshotCanvas(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+) -> jbyteArray {
+    let array = snapshot_canvas(canvas_native_ptr);
+    let jArray = env.new_byte_array(array.length as i32).unwrap();
+    let slice = std::slice::from_raw_parts_mut(array.array as *mut i8, array.length);
+    let _ = env.set_byte_array_region(jArray, 0, slice);
+    Box::from_raw(std::slice::from_raw_parts_mut(array.array, array.length));
+    jArray
 }
 
 
@@ -553,15 +448,37 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasView_nativeToData
     let default = env.new_string("image/png").unwrap();
     let javaStr = JavaStr::from_env(&env, default);
     let format = env.get_string(format).unwrap_or(javaStr.unwrap());
-    let result = to_data_url(canvas_native_ptr, format.as_ptr(), ((quality * 100f32) as i32));
+    let result = to_data_url(canvas_native_ptr, format.as_ptr(), (quality * 100f32) as i32);
     let string = CStr::from_ptr(result).to_str();
     env.new_string(string.unwrap()).unwrap().into_inner()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetDirection(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    direction: JString,
+) -> jlong {
+    set_direction(canvas_native_ptr, env.get_string(direction).unwrap().get_raw())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeGetDirection(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+) -> jstring {
+    let direction = get_direction(canvas_native_ptr);
+    let direction = CStr::from_ptr(direction).to_str();
+    let direction = direction.unwrap();
+    env.new_string(direction).unwrap().into_inner()
 }
 
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetMiterLimit(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     limit: f32,
@@ -571,7 +488,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeArc(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -595,7 +512,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeArcTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x1: jfloat,
@@ -609,7 +526,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeBeginPath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -618,7 +535,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeBezierCurveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     cp1x: jfloat,
@@ -633,7 +550,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeClearRect(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -657,7 +574,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeClip(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -682,7 +599,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeClosePath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -690,8 +607,102 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeFree(_env: JNIEnv, _: JClass, pattern: jlong) {
+    free_pattern(pattern)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeCreatePatternRaw(env: JNIEnv, _: JClass, image: jbyteArray,
+                                                                                        original_width: jint,
+                                                                                        original_height: jint, repetition: JString) -> jlong {
+    let length = env.get_array_length(image).unwrap_or(0);
+    let mut pixels_to_draw = vec![0i8; length as usize];
+    let _ = env.get_byte_array_region(image, 0, pixels_to_draw.as_mut_slice());
+    let mut buf = to_byte_slice(pixels_to_draw.as_mut_slice());
+    let image_pixels_ptr = buf.as_mut_ptr();
+    let default = env.new_string("repeat").unwrap();
+    let rep = env.get_string(repetition).unwrap_or(JavaStr::from_env(&env, default).unwrap());
+    create_pattern(image_pixels_ptr, pixels_to_draw.len(), original_width, original_height, rep.get_raw())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeCreatePatternCanvas(env: JNIEnv, _: JClass, image: jbyteArray, repetition: JString) -> jlong {
+    let length = env.get_array_length(image).unwrap_or(0);
+    let mut pixels_to_draw = vec![0i8; length as usize];
+    let _ = env.get_byte_array_region(image, 0, pixels_to_draw.as_mut_slice());
+    let mut buf = to_byte_slice(pixels_to_draw.as_mut_slice());
+    let image_pixels_ptr = buf.as_mut_ptr();
+    let default = env.new_string("repeat").unwrap();
+    let rep = env.get_string(repetition).unwrap_or(JavaStr::from_env(&env, default).unwrap());
+    create_pattern_encoded(image_pixels_ptr, pixels_to_draw.len(), rep.get_raw())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeCreatePattern(env: JNIEnv, _: JClass, image: JObject, repetition: JString) -> jlong {
+    let default = env.new_string("repeat").unwrap();
+    let rep = env.get_string(repetition).unwrap_or(JavaStr::from_env(&env, default).unwrap());
+
+    let native_interface = env.get_native_interface();
+    let bitmap_to_draw = image.into_inner();
+    let bitmapInfo_to_draw = Box::into_raw(Box::new(AndroidBitmapInfo::default()));
+
+    if AndroidBitmap_getInfo(native_interface, bitmap_to_draw, bitmapInfo_to_draw)
+        < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Get Bitmap Info Failed");
+        return 0;
+    }
+    let info_to_draw = Box::from_raw(bitmapInfo_to_draw);
+    let mut _dstPixelsToDraw = null_mut() as *mut c_void;
+    let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
+    if AndroidBitmap_lockPixels(native_interface, bitmap_to_draw, dstPixelsToDraw)
+        < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Get Bitmap Lock Failed");
+        return 0;
+    }
+    let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
+    let length_to_draw =
+        ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
+    let ptr_to_draw = _dstPixelsToDraw as *mut _;
+    let pixels_to_draw: &mut [u8] =
+        std::slice::from_raw_parts_mut(ptr_to_draw, length_to_draw as usize);
+
+    let image_pixels_ptr = pixels_to_draw.as_mut_ptr();
+
+    let ptr = create_pattern(image_pixels_ptr, pixels_to_draw.len(), info_to_draw.width as _, info_to_draw.height as _, rep.get_raw());
+
+    if AndroidBitmap_unlockPixels(native_interface, bitmap_to_draw) < ANDROID_BITMAP_RESULT_SUCCESS
+    {
+        debug!("Unlock Bitmap Failed");
+    }
+    return ptr;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeFreePattern(_: JNIEnv, _: JClass, pattern: jlong) {
+    free_pattern(pattern)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_Pattern_nativeSetPatternTransform(_: JNIEnv, _: JClass, pattern: jlong, matrix: jlong) -> jlong {
+    set_pattern_transform(pattern, matrix)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetFillPattern(_: JNIEnv, _: JClass, canvas_native_ptr: jlong, pattern: jlong) -> jlong {
+    set_fill_pattern(canvas_native_ptr, pattern)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetStrokePattern(_: JNIEnv, _: JClass, canvas_native_ptr: jlong, pattern: jlong) -> jlong {
+    set_stroke_pattern(canvas_native_ptr, pattern)
+}
+
+
+#[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetFillColorRgba(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     red: u8,
@@ -705,7 +716,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetFillColor(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     color: jint,
@@ -715,7 +726,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetStrokeColorRgba(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     red: u8,
@@ -728,7 +739,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetStrokeColor(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     color: jint,
@@ -753,10 +764,10 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let colors_len = env.get_array_length(colors).unwrap_or(0) as usize;
     let positions_len = env.get_array_length(positions).unwrap_or(0) as usize;
     let mut colors_array = vec![0i32; colors_len];
-    env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
+    let _ = env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
         .unwrap();
     let mut positions_array = vec![0f32; positions_len];
-    env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
+    let _ = env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
     set_gradient_linear(
         canvas_native_ptr,
         x0,
@@ -786,10 +797,10 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let colors_len = env.get_array_length(colors).unwrap_or(0) as usize;
     let positions_len = env.get_array_length(positions).unwrap_or(0) as usize;
     let mut colors_array = vec![0i32; colors_len];
-    env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
+    let _ = env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
         .unwrap();
     let mut positions_array = vec![0f32; positions_len];
-    env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
+    let _ = env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
     set_gradient_linear(
         canvas_native_ptr,
         x0,
@@ -823,10 +834,10 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let colors_len = env.get_array_length(colors).unwrap_or(0) as usize;
     let positions_len = env.get_array_length(positions).unwrap_or(0) as usize;
     let mut colors_array = vec![0i32; colors_len];
-    env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
+    let _ = env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
         .unwrap();
     let mut positions_array = vec![0f32; positions_len];
-    env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
+    let _ = env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
     set_gradient_radial(
         canvas_native_ptr,
         x0,
@@ -860,10 +871,10 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let colors_len = env.get_array_length(colors).unwrap_or(0) as usize;
     let positions_len = env.get_array_length(positions).unwrap_or(0) as usize;
     let mut colors_array = vec![0i32; colors_len];
-    env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
+    let _ = env.get_int_array_region(colors, 0, colors_array.as_mut_slice())
         .unwrap();
     let mut positions_array = vec![0f32; positions_len];
-    env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
+    let _ = env.get_float_array_region(positions, 0, positions_array.as_mut_slice());
     set_gradient_radial(
         canvas_native_ptr,
         x0,
@@ -882,6 +893,23 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 // drawImage()
 
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageCanvas(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    canvas_to_draw: jbyteArray,
+    width: jint,
+    height: jint,
+    dx: jfloat,
+    dy: jfloat,
+) -> jlong {
+    let len = env.get_array_length(canvas_to_draw).unwrap_or(0);
+    let mut data = vec![0i8; len as usize];
+    let _ = env.get_byte_array_region(canvas_to_draw, 0, data.as_mut_slice());
+    draw_image_encoded(canvas_native_ptr, data.as_ptr() as *const u8, data.len(), width, height, dx, dy)
+}
+
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageRaw(
@@ -896,7 +924,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 ) -> jlong {
     let length = env.get_array_length(_image).unwrap_or(0);
     let mut pixels_to_draw = vec![0i8; length as usize];
-    env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
+    let _ = env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
     let mut buf = to_byte_slice(pixels_to_draw.as_mut_slice());
     let image_pixels_ptr = buf.as_mut_ptr();
     let ptr = draw_image(
@@ -910,6 +938,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     );
     return ptr;
 }
+
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImage(
@@ -931,10 +960,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
         return 0;
     }
     let info_to_draw = Box::from_raw(bitmapInfo_to_draw);
-    let image_info_to_draw = ImageInfo::new_n32_premul(
-        ISize::new(info_to_draw.width as i32, info_to_draw.height as i32),
-        None,
-    );
     let mut _dstPixelsToDraw = null_mut() as *mut c_void;
     let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
     if AndroidBitmap_lockPixels(native_interface, bitmap_to_draw, dstPixelsToDraw)
@@ -946,8 +971,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
     let length_to_draw =
         ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
-    let new_len_to_draw = &length_to_draw * ratio_to_draw;
-    let new_cap_to_draw = &length_to_draw * ratio_to_draw;
     let ptr_to_draw = _dstPixelsToDraw as *mut _;
     let pixels_to_draw: &mut [u8] =
         std::slice::from_raw_parts_mut(ptr_to_draw, length_to_draw as usize);
@@ -969,6 +992,26 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     return ptr;
 }
 
+
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageCanvasDw(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    canvas_to_draw: jbyteArray,
+    width: jint,
+    height: jint,
+    dx: jfloat,
+    dy: jfloat,
+    d_width: jfloat,
+    d_height: jfloat,
+) -> jlong {
+    let len = env.get_array_length(canvas_to_draw).unwrap_or(0);
+    let mut data = vec![0i8; len as usize];
+    let _ = env.get_byte_array_region(canvas_to_draw, 0, data.as_mut_slice());
+    draw_image_dw_encoded(canvas_native_ptr, data.as_ptr() as *const u8, data.len(), width, height, dx, dy, d_width, d_height)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageDwRaw(
     env: JNIEnv,
@@ -984,7 +1027,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 ) -> jlong {
     let length = env.get_array_length(_image).unwrap_or(0);
     let mut pixels_to_draw = vec![0i8; length as usize];
-    env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
+    let _ = env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
     let mut buf = to_byte_slice(pixels_to_draw.as_mut_slice());
     let image_pixels_ptr = buf.as_mut_ptr();
     draw_image_dw(
@@ -1022,10 +1065,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
         return 0;
     }
     let info_to_draw = Box::from_raw(bitmapInfo_to_draw);
-    let image_info_to_draw = ImageInfo::new_n32_premul(
-        ISize::new(info_to_draw.width as i32, info_to_draw.height as i32),
-        None,
-    );
     let mut _dstPixelsToDraw = null_mut() as *mut c_void;
     let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
     if AndroidBitmap_lockPixels(native_interface, bitmap_to_draw, dstPixelsToDraw)
@@ -1037,8 +1076,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
     let length_to_draw =
         ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
-    let new_len_to_draw = &length_to_draw * ratio_to_draw;
-    let new_cap_to_draw = &length_to_draw * ratio_to_draw;
     let ptr_to_draw = _dstPixelsToDraw as *mut _;
     let pixels_to_draw: &mut [u8] =
         std::slice::from_raw_parts_mut(ptr_to_draw, length_to_draw as usize);
@@ -1061,6 +1098,30 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 
 #[no_mangle]
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageCanvasSw(
+    env: JNIEnv,
+    _: JClass,
+    canvas_native_ptr: jlong,
+    canvas_to_draw: jbyteArray,
+    width: jint,
+    height: jint,
+    sx: jfloat,
+    sy: jfloat,
+    s_width: jfloat,
+    s_height: jfloat,
+    dx: jfloat,
+    dy: jfloat,
+    d_width: jfloat,
+    d_height: jfloat,
+) -> jlong {
+    let len = env.get_array_length(canvas_to_draw).unwrap_or(0);
+    let mut data = vec![0i8; len as usize];
+    let _ = env.get_byte_array_region(canvas_to_draw, 0, data.as_mut_slice());
+    draw_image_sw_encoded(canvas_native_ptr, data.as_ptr() as *const u8, data.len(), width, height, sx, sy, s_width, s_height, dx, dy, d_width, d_height)
+}
+
+
+#[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeDrawImageSwRaw(
     env: JNIEnv,
     _: JClass,
@@ -1079,7 +1140,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 ) -> jlong {
     let length = env.get_array_length(_image).unwrap_or(0);
     let mut pixels_to_draw = vec![0i8; length as usize];
-    env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
+    let _ = env.get_byte_array_region(_image, 0, pixels_to_draw.as_mut_slice());
     let mut buf = to_byte_slice(pixels_to_draw.as_mut_slice());
     let image_pixels_ptr = buf.as_mut_ptr();
 
@@ -1127,10 +1188,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
         return 0;
     }
     let info_to_draw = Box::from_raw(bitmapInfo_to_draw);
-    let image_info_to_draw = ImageInfo::new_n32_premul(
-        ISize::new(info_to_draw.width as i32, info_to_draw.height as i32),
-        None,
-    );
     let mut _dstPixelsToDraw = null_mut() as *mut c_void;
     let dstPixelsToDraw: *mut *mut c_void = &mut _dstPixelsToDraw;
     if AndroidBitmap_lockPixels(native_interface, bitmap_to_draw, dstPixelsToDraw)
@@ -1142,8 +1199,6 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let ratio_to_draw = mem::size_of_val(&dstPixelsToDraw) / mem::size_of::<u8>();
     let length_to_draw =
         ((info_to_draw.width * info_to_draw.height) * ratio_to_draw as u32) as usize;
-    let new_len_to_draw = &length_to_draw * ratio_to_draw;
-    let new_cap_to_draw = &length_to_draw * ratio_to_draw;
     let ptr_to_draw = _dstPixelsToDraw as *mut _;
     let pixels_to_draw: &mut [u8] =
         std::slice::from_raw_parts_mut(ptr_to_draw, length_to_draw as usize);
@@ -1170,7 +1225,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeEllipse(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1220,7 +1275,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeFill(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -1255,7 +1310,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeLineTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1278,13 +1333,13 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
     let txt = env.get_string(text).unwrap();
     let measurement = get_measure_text(canvas_native_ptr, txt.as_ptr() as _);
     let value = JValue::from(measurement.width);
-    env.set_field(result, "width", "F", value);
+    let _ = env.set_field(result, "width", "F", value);
     result.into_inner()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeMoveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1295,7 +1350,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeQuadraticCurveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     cpx: jfloat,
@@ -1308,7 +1363,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeRect(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1321,7 +1376,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeRestore(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -1330,7 +1385,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeRotate(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     angle: jfloat,
@@ -1340,7 +1395,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSave(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -1349,7 +1404,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeScale(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1367,12 +1422,12 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 ) -> jlong {
     let size = env.get_array_length(array).unwrap_or(0) as usize;
     let mut buffer = vec![0f32; size];
-    env.get_float_array_region(array, 0, buffer.as_mut_slice());
+    let _ = env.get_float_array_region(array, 0, buffer.as_mut_slice());
     set_line_dash(canvas_native_ptr, size, buffer.as_ptr())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineDashOffset(env: JNIEnv,
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineDashOffset(_env: JNIEnv,
                                                                                                           _: JClass,
                                                                                                           canvas_native_ptr: jlong,
                                                                                                           offset: jfloat, ) -> jlong {
@@ -1381,7 +1436,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetTransform(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     a: jfloat,
@@ -1396,7 +1451,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeStroke(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -1405,7 +1460,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeStrokePath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     path: jlong,
@@ -1441,7 +1496,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeTransform(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     a: jfloat,
@@ -1456,7 +1511,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeTranslate(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1467,7 +1522,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetLineWidth(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     line_width: jfloat,
@@ -1490,7 +1545,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetGlobalAlpha(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     alpha: u8,
@@ -1528,7 +1583,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetShadowBlur(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     level: jfloat,
@@ -1538,7 +1593,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetShadowColor(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     color: jint,
@@ -1548,7 +1603,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetShadowOffsetX(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     x: jfloat,
@@ -1558,7 +1613,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetShadowOffsetY(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     y: jfloat,
@@ -1642,7 +1697,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetImageSmoothingEnabled(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
     enabled: jboolean,
@@ -1680,7 +1735,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeResetTransform(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     canvas_native_ptr: jlong,
 ) -> jlong {
@@ -1691,13 +1746,13 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInPath(_env: JNIEnv,
                                                                                                       _: JClass, canvas_ptr: i64, x: f32, y: f32) -> jboolean {
-    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let mut canvas_native: Box<CanvasNative> = Box::from_raw(canvas_ptr as *mut _);
     let path = canvas_native.path.clone();
     let _ = Box::into_raw(canvas_native);
     let path = Box::into_raw(Box::new(path)) as i64;
     let rule = CString::new("nonzero").unwrap().into_raw();
     let result = is_point_in_path(canvas_ptr, path, x, y, rule);
-    let _ = unsafe { CString::from_raw(rule) };
+    let _ = CString::from_raw(rule);
     let _ = Box::from_raw(path as *mut c_void);
     if result { return JNI_TRUE; }
     return JNI_FALSE;
@@ -1706,7 +1761,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInPathWithRule(env: JNIEnv,
                                                                                                               _: JClass, canvas_ptr: i64, x: f32, y: f32, fill_rule: JString) -> jboolean {
-    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let mut canvas_native: Box<CanvasNative> = Box::from_raw(canvas_ptr as *mut _);
     let path = canvas_native.path.clone();
     let _ = Box::into_raw(canvas_native);
     let path = Box::into_raw(Box::new(path)) as i64;
@@ -1733,7 +1788,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeIsPointInStroke(_env: JNIEnv,
                                                                                                         _: JClass, canvas_ptr: i64, x: f32, y: f32) -> jboolean {
-    let mut canvas_native: Box<CanvasNative> = unsafe { Box::from_raw(canvas_ptr as *mut _) };
+    let mut canvas_native: Box<CanvasNative> = Box::from_raw(canvas_ptr as *mut _);
     let path = canvas_native.path.clone();
     let _ = Box::into_raw(canvas_native);
     let path = Box::into_raw(Box::new(path)) as i64;
@@ -1765,7 +1820,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeFree
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeInit(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
 ) -> jlong {
     Box::into_raw(Box::new(Path::new())) as *mut _ as i64
@@ -1773,7 +1828,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeInit
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeInitWithPath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_ptr: jlong,
 ) -> jlong {
@@ -1791,7 +1846,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeInit
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeAddPath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     path_to_add_ptr: jlong,
@@ -1802,7 +1857,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeAddP
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeClosePath(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
 ) -> jlong {
@@ -1811,7 +1866,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeClos
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeMoveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x: jfloat,
@@ -1822,7 +1877,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeMove
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeLineTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x: jfloat,
@@ -1833,7 +1888,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeLine
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeBezierCurveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     cp1x: jfloat,
@@ -1848,7 +1903,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeBezi
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeQuadraticCurveTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     cpx: jfloat,
@@ -1861,7 +1916,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeQuad
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeArc(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x: jfloat,
@@ -1885,7 +1940,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeArc(
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeEllipse(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x: jfloat,
@@ -1913,7 +1968,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeElli
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeArcTo(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x1: jfloat,
@@ -1927,7 +1982,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeArcT
 
 #[no_mangle]
 pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeRect(
-    env: JNIEnv,
+    _env: JNIEnv,
     _: JClass,
     path_native_ptr: jlong,
     x: jfloat,
@@ -1939,27 +1994,27 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasPath2D_nativeRect
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetCurrentTransform(env: JNIEnv,
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeSetCurrentTransform(_env: JNIEnv,
                                                                                                             _: JClass, canvas_ptr: jlong, matrix: jlong) -> jlong {
     set_current_transform(canvas_ptr, matrix)
 }
 
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeGetCurrentTransform(env: JNIEnv,
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasRenderingContext2D_nativeGetCurrentTransform(_env: JNIEnv,
                                                                                                             _: JClass, canvas_ptr: jlong) -> jlong {
     get_current_transform(canvas_ptr)
 }
 
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasDOMMatrix_nativeInit(env: JNIEnv,
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasDOMMatrix_nativeInit(_env: JNIEnv,
                                                                                     _: JClass, ) -> jlong {
     create_matrix()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasDOMMatrix_nativeFreeMatrix(env: JNIEnv,
+pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasDOMMatrix_nativeFreeMatrix(_env: JNIEnv,
                                                                                           _: JClass, matrix: jlong) {
     free_matrix(matrix)
 }
@@ -1980,114 +2035,7 @@ pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_CanvasDOMMatrix_nativeG
                                                                                          _: JClass, matrix: jlong) -> jfloatArray {
     let mut data = get_matrix(matrix);
     let mut array = env.new_float_array(data.len() as i32).unwrap();
-    env.set_float_array_region(array, 0, data.as_slice());
+    let _ = env.set_float_array_region(array, 0, data.as_slice());
     array
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_SVGView_nativeInit(
-    env: JNIEnv,
-    _: JClass,
-    svg_canvas_native_ptr: jlong,
-    _bitmap: JObject,
-) -> jlong {
-    if svg_canvas_native_ptr > 0 {
-        return svg_canvas_native_ptr;
-    }
-
-    let native_interface = env.get_native_interface();
-    let bitmap = _bitmap.into_inner();
-
-    let bitmapInfo = Box::into_raw(Box::new(AndroidBitmapInfo::default()));
-    let get_info_success = AndroidBitmap_getInfo(native_interface, bitmap, bitmapInfo);
-    if get_info_success < ANDROID_BITMAP_RESULT_SUCCESS {
-        debug!("Get Bitmap Info Failed");
-        return 0;
-    }
-    let info = Box::from_raw(bitmapInfo);
-    let image_info =
-        ImageInfo::new_n32_premul(ISize::new(info.width as i32, info.height as i32), None);
-    let mut _dstPixels = null_mut() as *mut c_void;
-    let dstPixels: *mut *mut c_void = &mut _dstPixels;
-    let _get_lock_success = AndroidBitmap_lockPixels(native_interface, bitmap, dstPixels);
-    if _get_lock_success < ANDROID_BITMAP_RESULT_SUCCESS {
-        debug!("Get Bitmap Lock Failed");
-        return 0;
-    }
-    let ratio = mem::size_of_val(&dstPixels) / mem::size_of::<u8>();
-    let length = ((info.width * info.height) * ratio as u32) as usize;
-    let new_len = &length * ratio;
-    let new_cap = &length * ratio;
-    let ptr = _dstPixels as *mut _;
-    let pixels: &mut [u8] = std::slice::from_raw_parts_mut(ptr, length as usize);
-
-    let surface_holder =
-        Surface::new_raster_direct(&image_info, pixels, Some(info.stride as usize), None);
-    if surface_holder.is_none() {
-        return 0;
-    }
-    let mut surface = surface_holder.unwrap().deref().to_owned();
-    let mut native_svg_canvas = SVGCanvasNative {
-        surface,
-        context: None,
-    };
-
-    let ptr = Box::into_raw(Box::new(native_svg_canvas)) as *mut _ as i64;
-
-    AndroidBitmap_unlockPixels(native_interface, bitmap);
-    ptr
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn Java_com_github_triniwiz_canvas_SVGView_drawSVG(
-    env: JNIEnv,
-    _: JClass,
-    svg_canvas_native_ptr: jlong,
-    _bitmap: JObject,
-    svg: JString,
-) -> jlong {
-    let native_interface = env.get_native_interface();
-    let bitmap = _bitmap.into_inner();
-
-    let bitmapInfo = Box::into_raw(Box::new(AndroidBitmapInfo::default()));
-    let get_info_success = AndroidBitmap_getInfo(native_interface, bitmap, bitmapInfo);
-    if get_info_success < ANDROID_BITMAP_RESULT_SUCCESS {
-        debug!("Get Bitmap Info Failed");
-        return 0;
-    }
-    let info = Box::from_raw(bitmapInfo);
-    let image_info =
-        ImageInfo::new_n32_premul(ISize::new(info.width as i32, info.height as i32), None);
-    let mut _dstPixels = null_mut() as *mut c_void;
-    let dstPixels: *mut *mut c_void = &mut _dstPixels;
-    let _get_lock_success = AndroidBitmap_lockPixels(native_interface, bitmap, dstPixels);
-    if _get_lock_success < ANDROID_BITMAP_RESULT_SUCCESS {
-        debug!("Get Bitmap Lock Failed");
-        return 0;
-    }
-    let ratio = mem::size_of_val(&dstPixels) / mem::size_of::<u8>();
-    let length = ((info.width * info.height) * ratio as u32) as usize;
-    let new_len = &length * ratio;
-    let new_cap = &length * ratio;
-    let ptr = _dstPixels as *mut _;
-    let pixels: &mut [u8] = std::slice::from_raw_parts_mut(ptr, length as usize);
-
-    let surface_holder =
-        Surface::new_raster_direct(&image_info, pixels, Some(info.stride as usize), None);
-    if surface_holder.is_none() {
-        return svg_canvas_native_ptr;
-    }
-
-    let mut svg_canvas_native: Box<SVGCanvasNative> =
-        unsafe { Box::from_raw(svg_canvas_native_ptr as *mut _) };
-    let surface = surface_holder.unwrap();
-    svg_canvas_native.surface = surface.deref().to_owned();
-
-    let svg_canvas_native_ptr = Box::into_raw(svg_canvas_native) as *mut _ as i64;
-    let ptr = draw_svg_image(
-        svg_canvas_native_ptr,
-        env.get_string(svg).unwrap().as_ptr() as _,
-    );
-    AndroidBitmap_unlockPixels(native_interface, bitmap);
-    return ptr;
-}
